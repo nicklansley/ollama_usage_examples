@@ -83,11 +83,12 @@ if __name__ == '__main__':
         print('Ollama Image Describer describing files in folder:', args.file_path)
 
         image_list = get_image_list(args.file_path)
-        print('Found', len(image_list), 'images')
+        print('Found a total of', len(image_list), 'images')
 
         # filter out the images that have already been processed as
-        # they will have a file name length greater than 20 characters:
-        image_list = [image for image in image_list if len(image.split('/')[-1]) < 20]
+        # they will have a file name length greater than 24 characters:
+        image_list = [image for image in image_list if len(image.split('/')[-1]) < 24]
+        print('- of these,', len(image_list), 'images are less than 24 chars long so have not been processed yet.')
 
         for image_full_file_path in image_list:
             print('Processing', image_full_file_path, '...')
