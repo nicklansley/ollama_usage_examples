@@ -22,6 +22,8 @@ The script captures the total processing time and the evaluation time, which rep
 Use --file to specify the path to the Word document you want to summarise.
 ### Wordcount
 Use --wordcount to define the maximum number of words for the summary. If not provided, the default value is 1000.
+### WordWrap
+Use --wordwrap to specify the number of characters per line in the output file. If not provided, the default value is None (no word-wrapping).
 ### Output
 Use --output to indicate the path to the file where the summarised text will be saved.
 Please ensure your environment have Ollama AI SDK and python-docx library installed to run this script properly.
