@@ -79,11 +79,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('file_path', type=str, help='Path to the folder to process')
     args = parser.parse_args()
+    file_path = args.file_path.replace('file_path=', '')
 
     try:
-        print('Ollama Image Describer describing files in folder:', args.file_path)
+        print('Ollama Image Describer describing files in folder:', file_path)
 
-        image_list = get_image_list(args.file_path)
+        image_list = get_image_list(file_path)
         print('Found a total of', len(image_list), 'images')
 
         # filter out the images that have already been processed as
@@ -102,7 +103,7 @@ if __name__ == '__main__':
             print('    New file name:', new_file_name)
 
             # rename the file to the new file name
-            new_file_path = os.path.join(args.file_path, new_file_name)
+            new_file_path = os.path.join(file_path, new_file_name)
             shutil.move(image_full_file_path, new_file_path)
 
         print('Ollama Image Describer finished')
