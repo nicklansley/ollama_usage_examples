@@ -16,7 +16,8 @@ def read_word_document(document_file_path):
 
 def summarise_text(text, word_count):
     print('Sending text to the AI model for summarisation...')
-    ai_model_content_prompt = "Please summarize this document using no more than {} words. Here is the document:".format(word_count)
+    ai_model_content_prompt = "Please summarize this document using no more than {} words. Here is the document:".format(
+        word_count)
     response = ollama.chat(
         model='command-r:35b',
         messages=[
@@ -28,7 +29,8 @@ def summarise_text(text, word_count):
     )
 
     if response['message']['content']:
-        return response['message']['content'], int(response['total_duration'] / 1000000000), int(response['eval_duration'] / 1000000000)
+        return response['message']['content'], int(response['total_duration'] / 1000000000), int(
+            response['eval_duration'] / 1000000000)
 
     return 'Nothing was returned from the AI model. Please try again.', 0, 0
 
@@ -48,7 +50,6 @@ def word_wrap_text(text, max_length):
         lines.append(line)
 
     return '\n'.join(lines)
-
 
 
 if __name__ == '__main__':
@@ -76,7 +77,8 @@ if __name__ == '__main__':
 
         if args.wordwrap:
             print('The output has been word-wrapped after every {} characters.'.format(args.wordwrap))
-        print('Total processing time was {} seconds of which evaluation took {} seconds.'.format(total_duration, eval_duration))
+        print('Total processing time was {} seconds of which evaluation took {} seconds.'.format(total_duration,
+                                                                                                 eval_duration))
 
     except Exception as e:
         print('Error:', e)
