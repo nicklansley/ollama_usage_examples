@@ -13,7 +13,7 @@ Do not comment on the image, only provide the prompt. Do not start with "Create 
 def describe_image(image_file_path):
     with open(image_file_path, 'rb') as file:
         response = ollama.chat(
-            model='llava:34b',
+            model='llava:13b',
             messages=[
                 {
                     'role': 'user',
