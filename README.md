@@ -3,9 +3,9 @@
 
 For each script see its .md equivalent for more detailed information.
 
-* [Descriptive Image Renamer](ai_descriptive_image_renamer.md) (including installing ollama)
-* [Document Summariser](ollama_document_summariser.md)
-
+* [Descriptive Image Renamer](ai_descriptive_image_renamer.md) (Loops through a folder of images and renames them to reflect their content)
+* [Document Summariser](ollama_document_summariser.md) (summarises teext in wrod documents)
+* [Get Two AI Assistants Chatting with Ollama API](ollama_two_AIs_chat.md) (enables automated chat between two different AI assistants using the Ollama API)
 ## Prerequisites
 Install the llama server by following the instructions at:
 https://ollama.com/
