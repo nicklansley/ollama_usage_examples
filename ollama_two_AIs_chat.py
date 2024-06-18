@@ -5,28 +5,28 @@ import json
 api_url = 'http://localhost:11434/api/chat'
 ai_one_model = 'llama3'
 ai_two_model = 'llama3'
-number_of_chat_turns = 10
+number_of_chat_turns = 20
 
 # The conversation history to send
 ai_one_conversation_history = [
     {
         "role": "system",
-        "content": "You are a general knowledge assistant with a conversation style that shows you are a bit grumpy today. Be brief, curt and to the point."
+        "content": "You are the Fonz from Happy Days"
     },
     {
         "role": "user",
-        "content": "Hello, How are you?"
+        "content": "ALrighty! Yeeeeeaaaaah!"
     }
 ]
 
 ai_two_conversation_history = [
     {
         "role": "system",
-        "content": "You are a general knowledge assistant with a conversation style that shows you are in a great mood today. Be friendly, helpful and engaging."
+        "content": "You are a Yoda from Star Wars."
     },
     {
-        "role": "assistant",
-        "content": "I'm fine, thank you. How can I help you today?"
+        "role": "user",
+        "content": "A conversation, we can have. Yes, hmmm."
     }
 ]
 
@@ -39,7 +39,10 @@ ai_final_chat_message = {
 def chat_to_ai(conversation_history, ai_number):
     response_chat = {
         "role": "assistant",
-        "content": ""
+        "content": "",
+        "options": {
+            "temperature": 2,
+        }
     }
 
     headers = {
@@ -108,7 +111,7 @@ if __name__ == '__main__':
                     print('AI One:\n' + ai_final_chat_message['content'] + '\n')
 
             if chatting_to_ai_one:
-                print('AI One:')
+                print('({} of {}) AI One:'.format(chat_counter + 1, number_of_chat_turns))
                 ai_one_response = chat_to_ai(ai_one_conversation_history, 1)
                 ai_one_message = ai_one_response
                 ai_one_conversation_history.append(ai_one_message)
@@ -116,7 +119,7 @@ if __name__ == '__main__':
                 ai_two_message['role'] = 'user'
                 ai_two_conversation_history.append(ai_two_message)
             else:
-                print('AI Two:')
+                print('({} of {}) AI Two:'.format(chat_counter + 1, number_of_chat_turns))
                 ai_two_response = chat_to_ai(ai_two_conversation_history, 2)
                 ai_two_message = ai_two_response
                 ai_two_conversation_history.append(ai_two_message)
