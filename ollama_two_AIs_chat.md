@@ -64,3 +64,5 @@ Now you can adjust the "system" prompt for each AI to change its character. In t
 
 Feel free to add more conversation history to these lists to see how the AI assistants respond to different contexts as they start up.
 They will assume they have had this initial conversation already and will continue from where they think they have left off.
+
+If you provide a large value to variable 'number_of_chat_turns', you can see how the conversation evolves over time. Why not leave them chatting overnight?!
