@@ -147,7 +147,7 @@ if __name__ == '__main__':
         print('AI One ({}) style is: {}'.format(ai_one_conversation_history[0]['display_name'], ai_one_conversation_history[0]['content']))
         print('AI Two ({}) style is: {}'.format(ai_two_conversation_history[0]['display_name'], ai_two_conversation_history[0]['content']))
         print('-----')
-        print('{} started the conversation: {}'.format(ai_one_conversation_history[0]['display_name'], ai_one_conversation_history[1]['content']))
+        print('{} started the conversation: {}'.format(ai_one_conversation_history[1]['display_name'], ai_one_conversation_history[1]['content']))
         print('-----')
 
         conversation_history = [None, ai_one_conversation_history, ai_two_conversation_history]
