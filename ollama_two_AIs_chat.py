@@ -18,7 +18,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 ai_one_conversation_history = [
     {
         "role": "system",
-        "content": "You are the Fonz from Happy Days",
+        "content": "You are the Fonz from Happy Days but be brief in your answers",
         "display_name": "Fonz"
     },
     {
@@ -33,17 +33,18 @@ ai_one_conversation_history = [
 ai_two_conversation_history = [
     {
         "role": "system",
-        "content": "You are a Yoda from Star Wars.",
+        "content": "You are a Yoda from Star Wars. Be brief with your answers, you must.",
         "display_name": "Yoda"
 }
 ]
 
 # In testing, I have found that sometimes conversations can get a bit flat and repetitive.
-# To overcome this you can add 'curved balls' feature to improve AI chat complexity.
-# The code introduces a 'curved balls' chat message at the turn indicated by 'chat_turn_number.
-# This feature randomly injects unrelated messages into the conversation, which the AI responds
-# to as if they were the user's message. This addition is intended to increase conversation
-# variety and prevent repetitive or flat dialogue.
+# To overcome this you I added 'curved balls' to improve AI chat complexity.
+# Here we introduce a 'curved ball' chat message at the turn indicated by 'chat_turn_number'.
+# This feature injects these curved balls into the conversation at the chat_turn number.
+# If chat_turn_number is an odd number, the curved ball will seem to have been said by AI One,
+# or AI Two if it is an even number.
+# See the MD for this script for the reason for this name!
 curved_ball_chat_messages = [
     {
         "chat_turn_number": 7,
@@ -129,7 +130,7 @@ def chat_run(conversation_history, ai_number, ai_display_name, ai_other_number, 
     conversation_history[ai_other_number].append(ai_other_message)
     for curved_ball in curved_ball_chat_messages:
         if counter == curved_ball['chat_turn_number'] - 1:
-            print('Curved Ball: {}\n'.format(curved_ball['chat_message']))
+            print('(Curved Ball) {}:\n{}\n'.format(ai_display_name, curved_ball['chat_message']))
             curved_ball_chat_insertion = {
                 "role": "user",
                 "content": curved_ball['chat_message']
@@ -143,18 +144,19 @@ def chat_run(conversation_history, ai_number, ai_display_name, ai_other_number, 
 
 if __name__ == '__main__':
     try:
-        greetings = [None, ai_one_conversation_history[0]['display_name'], ai_two_conversation_history[0]['display_name']]
+        # Print the AI disply names by using a list so we can easily switch between the two AIs using 1 or 2
+        # for AI One or AI Two
+        ai_display_name = [None, ai_one_conversation_history[0]['display_name'], ai_two_conversation_history[0]['display_name']]
 
         print("Starting chat between AI One and AI Two...\n")
-        print('AI One ({}) style is: {}'.format(greetings[1], ai_one_conversation_history[0]['content']))
-        print('AI Two ({}) style is: {}'.format(greetings[2], ai_two_conversation_history[0]['content']))
+        print('AI One ({}) style is: {}'.format(ai_display_name[1], ai_one_conversation_history[0]['content']))
+        print('AI Two ({}) style is: {}'.format(ai_display_name[2], ai_two_conversation_history[0]['content']))
         print('-----')
         print('{} started the conversation: {}'.format(ai_two_conversation_history[0]['display_name'], ai_one_conversation_history[1]['content']))
         print('-----')
 
+        # by storing the conversation history in a list, we can easily switch between the two AIs - 1  or 2 for AI One or AI Two
         conversation_history = [None, ai_one_conversation_history, ai_two_conversation_history]
-        finals = [None, ai_final_chat_message, ai_final_chat_message]
-
         chatting_to_ai_one = True
         chat_counter = 0
 
@@ -164,11 +166,11 @@ if __name__ == '__main__':
 
             # Make final message if necessary
             if chat_counter >= number_of_chat_turns - 2:
-                conversation_history[ai_number].append(finals[ai_number])
-                print('{}:\n{}\n'.format(greetings[ai_number], finals[ai_number]['content']))
+                conversation_history[ai_number].append(ai_final_chat_message)
+                print('(Saying goodbye) {}:\n{}\n'.format(ai_display_name[ai_other_number], ai_final_chat_message['content']))
 
             # Perform a chat
-            chat_run(conversation_history, ai_number, greetings[ai_number], ai_other_number, chat_counter,
+            chat_run(conversation_history, ai_number, ai_display_name[ai_number], ai_other_number, chat_counter,
                      curved_ball_chat_messages)
 
             # Swap AIs

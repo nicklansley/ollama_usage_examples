@@ -65,9 +65,13 @@ Now you can adjust the "system" prompt for each AI to change its character. In t
 Feel free to add more conversation history to these lists to see how the AI assistants respond to different contexts as they start up.
 They will assume they have had this initial conversation already and will continue from where they think they have left off.
 
-'Curved balls' (a cricketing term!) provide a useful diversion to the chat if you find it gets a bit repetitive. Insert curved ball chats into the conversation history 
+'Curved balls'  provide a useful diversion to the chat if you find it gets a bit repetitive. Insert curved ball chats into the conversation history 
 using dictionary 'curved_ball_chat_messages'. The AI will respond to this as if it is a continuation of the conversation.
 I find this useful if 'The Fonz' and 'Yoda' conclude their chat early and start repetitively saying goodbye to each other!
+The term “Curved Ball” typically refers to a type of pitch in baseball. It’s a pitch where the ball is thrown with a spin 
+that makes it swerve as it moves towards the batter, causing it to dive downward. This movement can make it challenging 
+for the batter to hit the ball effectively. The curveball is known for its deceiving motion, often moving away from the batter’s
+expected contact point. Imagine what it might do to the AI conversation!
 
 
 If you provide a large value to variable 'number_of_chat_turns', you can see how the conversation evolves over time. But bear in mind that there is a prompt size limit
