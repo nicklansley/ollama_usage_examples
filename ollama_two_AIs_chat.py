@@ -37,6 +37,26 @@ ai_two_conversation_history = [
     }
 ]
 
+
+# In testing I have found that sometimes conversations can get a bit flat and repetitive.
+# To overcome this you can add 'curved balls' feature to improve AI chat complexity.
+# The code introduces a 'curved balls' chat message at the turn indicated by 'chat_turn_number.
+# This feature randomly injects unrelated messages into the conversation, which the AI responds
+# to as if they were the user's message. This addition is intended to increase conversation
+# variety and prevent repetitive or flat dialogue.
+curved_ball_chat_messages = [
+    {
+        "chat_turn_number": 7,
+        "chat_message": "I suddenly feel hungry for a cheeseburger. Do you like cheeseburgers?"
+    },
+    {
+        "chat_turn_number": 14,
+        "chat_message": "Well now I want to talk petunias. What do you think about that?"
+    }
+
+]
+
+
 ai_final_chat_message = {
     "role": "user",
     "content": "I need to go - thanks and goodbye"
@@ -137,6 +157,18 @@ if __name__ == '__main__':
                 ai_two_message = ai_one_message.copy()
                 ai_two_message['role'] = 'user'
                 ai_two_conversation_history.append(ai_two_message)
+                # curved ball check
+                for curved_ball in curved_ball_chat_messages:
+                    if chat_counter == curved_ball['chat_turn_number'] - 1:
+                        print('Curved Ball: {}\n'.format(curved_ball['chat_message']))
+                        curved_ball_chat_insertion = {
+                            "role": "user",
+                            "content": curved_ball['chat_message']
+                        }
+                        ai_two_conversation_history.append(curved_ball_chat_insertion)
+                        ai_one_message = curved_ball_chat_insertion.copy()
+                        ai_one_message['role'] = 'assistant'
+                        ai_one_conversation_history.append(ai_one_message)
             else:
                 print('({} of {}) AI Two:'.format(chat_counter + 1, number_of_chat_turns))
                 ai_two_response = chat_to_ai(ai_two_conversation_history, 2)
@@ -145,6 +177,18 @@ if __name__ == '__main__':
                 ai_one_message = ai_two_message.copy()
                 ai_one_message['role'] = 'user'
                 ai_one_conversation_history.append(ai_one_message)
+                # curved ball check
+                for curved_ball in curved_ball_chat_messages:
+                    if chat_counter == curved_ball['chat_turn_number'] - 1:
+                        print('Curved Ball: {}\n'.format(curved_ball['chat_message']))
+                        curved_ball_chat_insertion = {
+                            "role": "user",
+                            "content": curved_ball['chat_message']
+                        }
+                        ai_one_conversation_history.append(curved_ball_chat_insertion)
+                        ai_two_message = curved_ball_chat_insertion.copy()
+                        ai_two_message['role'] = 'assistant'
+                        ai_two_conversation_history.append(ai_two_message)
 
             # Save the conversation history so far
             save_conversation('ai_one_conversation_history.json', ai_one_conversation_history)

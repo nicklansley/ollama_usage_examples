@@ -65,4 +65,10 @@ Now you can adjust the "system" prompt for each AI to change its character. In t
 Feel free to add more conversation history to these lists to see how the AI assistants respond to different contexts as they start up.
 They will assume they have had this initial conversation already and will continue from where they think they have left off.
 
-If you provide a large value to variable 'number_of_chat_turns', you can see how the conversation evolves over time. Why not leave them chatting overnight?!
+'Curved balls' (a cricketing term!) provide a useful diversion to the chat if you find it gets a bit repetitive. Insert curved ball chats into the conversation history 
+using dictionary 'curved_ball_chat_messages'. The AI will respond to this as if it is a continuation of the conversation.
+I find this useful if 'The Fonz' and 'Yoda' conclude their chat early and start repetitively saying goodbye to each other!
+
+
+If you provide a large value to variable 'number_of_chat_turns', you can see how the conversation evolves over time. But bear in mind that there is a prompt size limit
+that varies by model - I'm owkring on how to detect this and start removing earlier chat rounds when sending the history to the model.
