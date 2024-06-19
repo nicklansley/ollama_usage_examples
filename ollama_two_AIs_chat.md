@@ -66,7 +66,7 @@ Feel free to add more conversation history to these lists to see how the AI assi
 They will assume they have had this initial conversation already and will continue from where they think they have left off.
 
 'Curved balls'  provide a useful diversion to the chat if you find it gets a bit repetitive. Insert curved ball chats into the conversation history 
-using dictionary 'curved_ball_chat_messages'. The AI will respond to this as if it is a continuation of the conversation.
+using list 'curved_ball_chat_messages'. The AI will respond to this as if it is a continuation of the conversation.
 I find this useful if 'The Fonz' and 'Yoda' conclude their chat early and start repetitively saying goodbye to each other!
 The term “Curved Ball” typically refers to a type of pitch in baseball. It’s a pitch where the ball is thrown with a spin 
 that makes it swerve as it moves towards the batter, causing it to dive downward. This movement can make it challenging 
