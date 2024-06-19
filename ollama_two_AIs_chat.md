@@ -60,7 +60,7 @@ Bear in mind that two different models will slow down the conversation as each m
 In the script you will see two lists of strings, ai_one_conversation_history and ai_two_conversation_history. 
 These lists contain the conversation history of the two AI assistants. 
 
-Now you can adjust the "system" prompt for each AI to change its character. In the example I have a grump and a happy AI. 
+Now you can adjust the "system" prompt for each AI to change its character. In the example I have The Fonz from HAppy Days talking to Yoda from Star Wars! 
 
 Feel free to add more conversation history to these lists to see how the AI assistants respond to different contexts as they start up.
 They will assume they have had this initial conversation already and will continue from where they think they have left off.
@@ -75,4 +75,47 @@ expected contact point. Imagine what it might do to the AI conversation!
 
 
 If you provide a large value to variable 'number_of_chat_turns', you can see how the conversation evolves over time. But bear in mind that there is a prompt size limit
-that varies by model - I'm owkring on how to detect this and start removing earlier chat rounds when sending the history to the model.
+that varies by model - I'm working on how to detect this and start removing earlier chat rounds when sending the history to the model.
+
+## Example
+### Here is an example where the two AIs can play Tic-Tac-Toe (noughts and crosses):
+```python
+# change the values of these variables to get two AIs to play Tic-Tac-Toe
+ai_one_model = 'llama3:70B' # go for as large a model as you can for this game
+ai_two_model = 'llama3:70B' # or the play will be pretty random or just rubbish! 
+number_of_chat_turns = 10
+
+ai_one_conversation_history = [
+    {
+        "role": "system",
+        "content": "You are a tic-tac-toe player. You will be playing 'noughts' in this game.",
+        "display_name": "Noughts Player"
+    },
+    {
+        "role": "user",
+        "content": "Please let us start this game of tic-tac-toe. I am ready to play.",
+    }
+]
+
+ai_two_conversation_history = [
+    {
+        "role": "system",
+        "content": "You are a tic-tac-toe player. You will be playing 'crosses' in this game.",
+        "display_name": "Crosses Player"
+}
+]
+
+# set chat_turn_number to an unreachable number or set to an empty list []
+# so that no curved balls will be thrown into the conversation
+# (unless injecting chaos is your thing!)
+curved_ball_chat_messages = [
+    {
+        "chat_turn_number": 99,
+        "chat_message": "I suddenly feel hungry for a cheeseburger. Do you like cheeseburgers?"
+    },
+    {
+        "chat_turn_number": 99,
+        "chat_message": "Well now I want to talk petunias. What do you think about that?"
+    }
+]
+```
