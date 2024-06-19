@@ -39,12 +39,12 @@ ai_two_conversation_history = [
 ]
 
 # In testing, I have found that sometimes conversations can get a bit flat and repetitive.
-# To overcome this you I added 'curved balls' to improve AI chat complexity.
+# To overcome this I added 'curved balls' to improve AI chat complexity.
 # Here we introduce a 'curved ball' chat message at the turn indicated by 'chat_turn_number'.
-# This feature injects these curved balls into the conversation at the chat_turn number.
+# This feature injects the curved ball into the conversation at the chat_turn number.
 # If chat_turn_number is an odd number, the curved ball will seem to have been said by AI One,
 # or AI Two if it is an even number.
-# See the MD for this script for the reason for this name!
+# See the MD for this script for the reason for this term 'curved balls'!
 curved_ball_chat_messages = [
     {
         "chat_turn_number": 7,
