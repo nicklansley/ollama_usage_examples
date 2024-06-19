@@ -7,7 +7,10 @@ ai_one_model = 'llama3'
 ai_two_model = 'llama3'
 number_of_chat_turns = 20
 
-# The conversation history to send
+# This is the conversation starter for the AI One. Bear in mind that the "user" role will have come
+# from AI Two, so the AI One will respond to this message and will appear as "assistant" in this history.
+# If you want to pre-start the conversation, make sure that "user" speaks in the character style you set
+# for AI One in the "system" prompt in "ai_two_conversation_history".
 ai_one_conversation_history = [
     {
         "role": "system",
@@ -15,10 +18,14 @@ ai_one_conversation_history = [
     },
     {
         "role": "user",
-        "content": "ALrighty! Yeeeeeaaaaah!"
+        "content": "Hello, I understand Fonz you are. A question, I have for you. Answer, can you?"
     }
 ]
 
+# This is the conversation starter for the AI Two. Bear in mind that the "user" role will have come
+# from AI One, so the AI Two will respond to this message and will appear as "assistant" in this history.
+# If you want to pre-start the conversation, make sure that "user" speaks in the character style
+#  you set for AI One in the "system" prompt set in "ai_one_conversation_history".
 ai_two_conversation_history = [
     {
         "role": "system",
@@ -26,7 +33,7 @@ ai_two_conversation_history = [
     },
     {
         "role": "user",
-        "content": "A conversation, we can have. Yes, hmmm."
+        "content": "ALrighty! Yeeeeeaaaaah! What's up?"
     }
 ]
 
@@ -65,9 +72,10 @@ def chat_to_ai(conversation_history, ai_number):
                 if line:
                     decoded_line = line.decode('utf-8')
                     chat_response = json.loads(decoded_line)
+                    chat_message = chat_response['message']['content']
+                    response_chat['content'] += chat_message
 
-                    response_chat['content'] += chat_response['message']['content']
-                    print(chat_response['message']['content'], end='', flush=True)
+                    print(chat_message, end='', flush=True)
 
                     # Check if the conversation is done
                     if chat_response.get('done', False):
@@ -94,6 +102,17 @@ def save_conversation(path, conversation):
 
 if __name__ == '__main__':
     try:
+        print("Starting chat between AI One and AI Two...\n")
+        print('AI One style is: ' + ai_one_conversation_history[0]['content'])
+        print('AI Two style is: ' + ai_two_conversation_history[0]['content'])
+        print('-----')
+
+        # Remember that at start up, the first words of the AI appear as 'user' in the conversation history
+        # of the other AI. So, the first message of AI One is actually the first message of AI Two and vice versa.
+        print('AI One started the conversation: ' + ai_two_conversation_history[1]['content'])
+        print('AI Two responded: ' + ai_one_conversation_history[1]['content'])
+        print('-----')
+
         chatting_to_ai_one = False
         chat_counter = 0
 
