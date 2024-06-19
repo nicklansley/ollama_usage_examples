@@ -143,15 +143,16 @@ def chat_run(conversation_history, ai_number, ai_display_name, ai_other_number, 
 
 if __name__ == '__main__':
     try:
+        greetings = [None, ai_one_conversation_history[0]['display_name'], ai_two_conversation_history[0]['display_name']]
+
         print("Starting chat between AI One and AI Two...\n")
-        print('AI One ({}) style is: {}'.format(ai_one_conversation_history[0]['display_name'], ai_one_conversation_history[0]['content']))
-        print('AI Two ({}) style is: {}'.format(ai_two_conversation_history[0]['display_name'], ai_two_conversation_history[0]['content']))
+        print('AI One ({}) style is: {}'.format(greetings[1], ai_one_conversation_history[0]['content']))
+        print('AI Two ({}) style is: {}'.format(greetings[2], ai_two_conversation_history[0]['content']))
         print('-----')
-        print('{} started the conversation: {}'.format(ai_one_conversation_history[1]['display_name'], ai_one_conversation_history[1]['content']))
+        print('{} started the conversation: {}'.format(ai_two_conversation_history[0]['display_name'], ai_one_conversation_history[1]['content']))
         print('-----')
 
         conversation_history = [None, ai_one_conversation_history, ai_two_conversation_history]
-        greetings = [None, ai_one_conversation_history[0]['display_name'], ai_two_conversation_history[0]['display_name']]
         finals = [None, ai_final_chat_message, ai_final_chat_message]
 
         chatting_to_ai_one = True
