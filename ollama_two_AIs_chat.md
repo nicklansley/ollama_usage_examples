@@ -105,7 +105,7 @@ ai_two_conversation_history = [
 }
 ]
 
-# set chat_turn_number to an unreachable number or set to an empty list []
+# set chat_turn_number to an unreachable number or set curved_ball_chat_messages to an empty list []
 # so that no curved balls will be thrown into the conversation
 # (unless injecting chaos is your thing!)
 curved_ball_chat_messages = [
