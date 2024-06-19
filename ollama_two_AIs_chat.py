@@ -15,7 +15,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 # This is the conversation starter for the AI One. Bear in mind that the "user" role will have come
 # from AI Two, so the AI One will respond to this message and will appear as "assistant" in this history.
 # If you want to pre-start the conversation, make sure that "user" speaks in the character style you set
-# for AI One in the "system" prompt in "ai_two_conversation_history".
+# for AI Two in the "system" prompt in "ai_two_conversation_history".
 ai_one_conversation_history = [
     {
         "role": "system",
