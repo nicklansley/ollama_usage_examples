@@ -12,7 +12,7 @@ pip install requests
 ```
 
 ## Usage
-Run the script 'ollama_teo_AIs_chat.py' using Python 3. The script will start a loop where each AI assistant takes a turn to respond in the conversation. The conversation keeps repeating until a chat count is reached.
+Run the script 'ollama_two_AIs_chat.py' using Python 3. The script will start a loop where each AI assistant takes a turn to respond in the conversation. The conversation keeps repeating until a chat count is reached.
 
 ## Code Description
 ### Main Function
