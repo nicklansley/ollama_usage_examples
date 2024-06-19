@@ -1,11 +1,16 @@
 import requests
 import json
+import sys
 
 # Replace 'your_api_key' with your actual API key for Ollama API
 api_url = 'http://localhost:11434/api/chat'
 ai_one_model = 'llama3'
 ai_two_model = 'llama3'
 number_of_chat_turns = 20
+
+# ensure encoding is utf-8
+sys.stdout.reconfigure(encoding='utf-8')
+
 
 # This is the conversation starter for the AI One. Bear in mind that the "user" role will have come
 # from AI Two, so the AI One will respond to this message and will appear as "assistant" in this history.
@@ -120,80 +125,60 @@ def save_conversation(path, conversation):
         json.dump(conversation, f, indent=4)
 
 
+def chat_run(conversation_history, ai_number, ai_other_number, counter, curved_ball_chat_messages):
+    print('({} of {}) AI {} :'.format(counter + 1, number_of_chat_turns, ai_number))
+    ai_response = chat_to_ai(conversation_history[ai_number], ai_number)
+    ai_message = ai_response
+    conversation_history[ai_number].append(ai_message)
+    ai_other_message = ai_message.copy()
+    ai_other_message['role'] = 'user'
+    conversation_history[ai_other_number].append(ai_other_message)
+    for curved_ball in curved_ball_chat_messages:
+        if counter == curved_ball['chat_turn_number'] - 1:
+            print('Curved Ball: {}\n'.format(curved_ball['chat_message']))
+            curved_ball_chat_insertion = {
+                "role": "user",
+                "content": curved_ball['chat_message']
+            }
+            conversation_history[ai_other_number].append(curved_ball_chat_insertion)
+            ai_message = curved_ball_chat_insertion.copy()
+            ai_message['role'] = 'assistant'
+            conversation_history[ai_number].append(ai_message)
+    save_conversation('ai_{}_conversation_history.json'.format(ai_number), conversation_history[ai_number])
+
+
 if __name__ == '__main__':
     try:
         print("Starting chat between AI One and AI Two...\n")
         print('AI One style is: ' + ai_one_conversation_history[0]['content'])
         print('AI Two style is: ' + ai_two_conversation_history[0]['content'])
         print('-----')
-
-        # Remember that at start up, the first words of the AI appear as 'user' in the conversation history
-        # of the other AI. So, the first message of AI One is actually the first message of AI Two and vice versa.
         print('AI One started the conversation: ' + ai_two_conversation_history[1]['content'])
         print('AI Two responded: ' + ai_one_conversation_history[1]['content'])
         print('-----')
+
+        conversation_history = [None, ai_one_conversation_history, ai_two_conversation_history]
+        greetings = [None, 'AI One', 'AI Two']
+        finals = [None, ai_final_chat_message, ai_final_chat_message]
 
         chatting_to_ai_one = False
         chat_counter = 0
 
         while chat_counter < number_of_chat_turns:
-            chatting_to_ai_one = not chatting_to_ai_one
+            ai_number = 1 if chatting_to_ai_one else 2
+            ai_other_number = 2 if chatting_to_ai_one else 1
 
+            # Make final message if necessary
             if chat_counter >= number_of_chat_turns - 2:
-                # Send the final message - note the that if chatting_to_ai_one is True,
-                # then the final message is as if sent FROM AI Two and vice versa
-                if chatting_to_ai_one:
-                    ai_two_conversation_history.append(ai_final_chat_message)
-                    print('AI Two:\n' + ai_final_chat_message['content'] + '\n')
-                else:
-                    ai_one_conversation_history.append(ai_final_chat_message)
-                    print('AI One:\n' + ai_final_chat_message['content'] + '\n')
+                conversation_history[ai_number].append(finals[ai_number])
+                print('{}:\n{}\n'.format(greetings[ai_number], finals[ai_number]['content']))
 
-            if chatting_to_ai_one:
-                print('({} of {}) AI One:'.format(chat_counter + 1, number_of_chat_turns))
-                ai_one_response = chat_to_ai(ai_one_conversation_history, 1)
-                ai_one_message = ai_one_response
-                ai_one_conversation_history.append(ai_one_message)
-                ai_two_message = ai_one_message.copy()
-                ai_two_message['role'] = 'user'
-                ai_two_conversation_history.append(ai_two_message)
-                # curved ball check
-                for curved_ball in curved_ball_chat_messages:
-                    if chat_counter == curved_ball['chat_turn_number'] - 1:
-                        print('Curved Ball: {}\n'.format(curved_ball['chat_message']))
-                        curved_ball_chat_insertion = {
-                            "role": "user",
-                            "content": curved_ball['chat_message']
-                        }
-                        ai_two_conversation_history.append(curved_ball_chat_insertion)
-                        ai_one_message = curved_ball_chat_insertion.copy()
-                        ai_one_message['role'] = 'assistant'
-                        ai_one_conversation_history.append(ai_one_message)
-            else:
-                print('({} of {}) AI Two:'.format(chat_counter + 1, number_of_chat_turns))
-                ai_two_response = chat_to_ai(ai_two_conversation_history, 2)
-                ai_two_message = ai_two_response
-                ai_two_conversation_history.append(ai_two_message)
-                ai_one_message = ai_two_message.copy()
-                ai_one_message['role'] = 'user'
-                ai_one_conversation_history.append(ai_one_message)
-                # curved ball check
-                for curved_ball in curved_ball_chat_messages:
-                    if chat_counter == curved_ball['chat_turn_number'] - 1:
-                        print('Curved Ball: {}\n'.format(curved_ball['chat_message']))
-                        curved_ball_chat_insertion = {
-                            "role": "user",
-                            "content": curved_ball['chat_message']
-                        }
-                        ai_one_conversation_history.append(curved_ball_chat_insertion)
-                        ai_two_message = curved_ball_chat_insertion.copy()
-                        ai_two_message['role'] = 'assistant'
-                        ai_two_conversation_history.append(ai_two_message)
+            # Perform a chat
+            chat_run(conversation_history, ai_number, ai_other_number, chat_counter,
+                     curved_ball_chat_messages)
 
-            # Save the conversation history so far
-            save_conversation('ai_one_conversation_history.json', ai_one_conversation_history)
-            save_conversation('ai_two_conversation_history.json', ai_two_conversation_history)
-
+            # Swap AIs
+            chatting_to_ai_one = not chatting_to_ai_one
             chat_counter += 1
 
     except KeyboardInterrupt:
