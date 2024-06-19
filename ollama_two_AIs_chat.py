@@ -11,7 +11,6 @@ number_of_chat_turns = 20
 # ensure encoding is utf-8
 sys.stdout.reconfigure(encoding='utf-8')
 
-
 # This is the conversation starter for the AI One. Bear in mind that the "user" role will have come
 # from AI Two, so the AI One will respond to this message and will appear as "assistant" in this history.
 # If you want to pre-start the conversation, make sure that "user" speaks in the character style you set
@@ -27,23 +26,17 @@ ai_one_conversation_history = [
     }
 ]
 
-# This is the conversation starter for the AI Two. Bear in mind that the "user" role will have come
-# from AI One, so the AI Two will respond to this message and will appear as "assistant" in this history.
-# If you want to pre-start the conversation, make sure that "user" speaks in the character style
-#  you set for AI One in the "system" prompt set in "ai_one_conversation_history".
+# This is the conversation starter for the AI Two. There is no need to pre-start the conversation
+# as AI Two will start the conversation. The AI Two will respond to the AI One's message and will appear
+# as "assistant" in this history.
 ai_two_conversation_history = [
     {
         "role": "system",
         "content": "You are a Yoda from Star Wars."
-    },
-    {
-        "role": "user",
-        "content": "ALrighty! Yeeeeeaaaaah! What's up?"
     }
 ]
 
-
-# In testing I have found that sometimes conversations can get a bit flat and repetitive.
+# In testing, I have found that sometimes conversations can get a bit flat and repetitive.
 # To overcome this you can add 'curved balls' feature to improve AI chat complexity.
 # The code introduces a 'curved balls' chat message at the turn indicated by 'chat_turn_number.
 # This feature randomly injects unrelated messages into the conversation, which the AI responds
@@ -60,7 +53,6 @@ curved_ball_chat_messages = [
     }
 
 ]
-
 
 ai_final_chat_message = {
     "role": "user",
@@ -126,7 +118,7 @@ def save_conversation(path, conversation):
 
 
 def chat_run(conversation_history, ai_number, ai_other_number, counter, curved_ball_chat_messages):
-    print('({} of {}) AI {} :'.format(counter + 1, number_of_chat_turns, ai_number))
+    print('({} of {}) AI {}:'.format(counter + 1, number_of_chat_turns, ai_number))
     ai_response = chat_to_ai(conversation_history[ai_number], ai_number)
     ai_message = ai_response
     conversation_history[ai_number].append(ai_message)
@@ -153,15 +145,14 @@ if __name__ == '__main__':
         print('AI One style is: ' + ai_one_conversation_history[0]['content'])
         print('AI Two style is: ' + ai_two_conversation_history[0]['content'])
         print('-----')
-        print('AI One started the conversation: ' + ai_two_conversation_history[1]['content'])
-        print('AI Two responded: ' + ai_one_conversation_history[1]['content'])
+        print('AI Two started the conversation: ' + ai_one_conversation_history[1]['content'])
         print('-----')
 
         conversation_history = [None, ai_one_conversation_history, ai_two_conversation_history]
         greetings = [None, 'AI One', 'AI Two']
         finals = [None, ai_final_chat_message, ai_final_chat_message]
 
-        chatting_to_ai_one = False
+        chatting_to_ai_one = True
         chat_counter = 0
 
         while chat_counter < number_of_chat_turns:
