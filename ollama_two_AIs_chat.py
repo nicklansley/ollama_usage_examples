@@ -18,11 +18,12 @@ sys.stdout.reconfigure(encoding='utf-8')
 ai_one_conversation_history = [
     {
         "role": "system",
-        "content": "You are the Fonz from Happy Days"
+        "content": "You are the Fonz from Happy Days",
+        "display_name": "Fonz"
     },
     {
         "role": "user",
-        "content": "Hello, I understand Fonz you are. A question, I have for you. Answer, can you?"
+        "content": "Hello, I understand Fonz you are. A question, I have for you. Answer, can you?",
     }
 ]
 
@@ -32,8 +33,9 @@ ai_one_conversation_history = [
 ai_two_conversation_history = [
     {
         "role": "system",
-        "content": "You are a Yoda from Star Wars."
-    }
+        "content": "You are a Yoda from Star Wars.",
+        "display_name": "Yoda"
+}
 ]
 
 # In testing, I have found that sometimes conversations can get a bit flat and repetitive.
@@ -117,8 +119,8 @@ def save_conversation(path, conversation):
         json.dump(conversation, f, indent=4)
 
 
-def chat_run(conversation_history, ai_number, ai_other_number, counter, curved_ball_chat_messages):
-    print('({} of {}) AI {}:'.format(counter + 1, number_of_chat_turns, ai_number))
+def chat_run(conversation_history, ai_number, ai_display_name, ai_other_number, counter, curved_ball_chat_messages):
+    print('({} of {}) {}:'.format(counter + 1, number_of_chat_turns, ai_display_name))
     ai_response = chat_to_ai(conversation_history[ai_number], ai_number)
     ai_message = ai_response
     conversation_history[ai_number].append(ai_message)
@@ -142,14 +144,14 @@ def chat_run(conversation_history, ai_number, ai_other_number, counter, curved_b
 if __name__ == '__main__':
     try:
         print("Starting chat between AI One and AI Two...\n")
-        print('AI One style is: ' + ai_one_conversation_history[0]['content'])
-        print('AI Two style is: ' + ai_two_conversation_history[0]['content'])
+        print('AI One ({}) style is: {}'.format(ai_one_conversation_history[0]['display_name'], ai_one_conversation_history[0]['content']))
+        print('AI Two ({}) style is: {}'.format(ai_two_conversation_history[0]['display_name'], ai_two_conversation_history[0]['content']))
         print('-----')
-        print('AI Two started the conversation: ' + ai_one_conversation_history[1]['content'])
+        print('{} started the conversation: {}'.format(ai_one_conversation_history[0]['display_name'], ai_one_conversation_history[1]['content']))
         print('-----')
 
         conversation_history = [None, ai_one_conversation_history, ai_two_conversation_history]
-        greetings = [None, 'AI One', 'AI Two']
+        greetings = [None, ai_one_conversation_history[0]['display_name'], ai_two_conversation_history[0]['display_name']]
         finals = [None, ai_final_chat_message, ai_final_chat_message]
 
         chatting_to_ai_one = True
@@ -165,7 +167,7 @@ if __name__ == '__main__':
                 print('{}:\n{}\n'.format(greetings[ai_number], finals[ai_number]['content']))
 
             # Perform a chat
-            chat_run(conversation_history, ai_number, ai_other_number, chat_counter,
+            chat_run(conversation_history, ai_number, greetings[ai_number], ai_other_number, chat_counter,
                      curved_ball_chat_messages)
 
             # Swap AIs
