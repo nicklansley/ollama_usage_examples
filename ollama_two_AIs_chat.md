@@ -106,7 +106,7 @@ the AI will assume that the words came from the other AI.
 
 'Curved balls' provide a useful diversion to the chat if you find it gets a bit repetitive. Insert curved ball chats into the conversation history 
 using list 'curved_ball_chat_messages'. The AI will respond to this as if it is a continuation of the conversation.
-If you choose an even number, the chat will appear to have come from AI One, and if you choose an odd number, it will appear to have come from AI Two.
+If you choose an odd number, the chat will appear to have been said by AI One, and if you choose an even number, it will appear to have been said by AI Two.
 I find this useful if 'The Fonz' and 'Yoda' conclude their chat early and start repetitively saying goodbye to each other!
 The term “Curved Ball” typically refers to a type of pitch in baseball where the ball is thrown with a spin, known for its deceiving motion.
 Imagine what it might do to the AI conversation! But if you don't want to use any curved balls, just set curved_ball_chat_messages to an empty list [].
