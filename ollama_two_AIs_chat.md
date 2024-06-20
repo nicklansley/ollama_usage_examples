@@ -14,9 +14,9 @@ pip install requests
 ## Usage
 Run the script 
 ```bash
-python ollama_two_AIs_chat.py  <chat_config-name>' 
+python ollama_two_AIs_chat.py  <json-chat-config-file-name>
 ```
-where <chat_config-name> is the name of the json-formatted chat configuration file you want to use.
+where <json-chat-config-file-name> is the name of the json-formatted chat configuration file you want to use.
 using Python 3. The script will start a loop where each AI assistant takes a turn to respond in the conversation. The conversation keeps repeating until a chat count is reached.
 
 
@@ -101,7 +101,7 @@ The list 'ai_one_conversation_history' also needs a single 'user' prompt to star
 Feel free to add more conversation history to these lists to see how the AI assistants respond to different contexts as they start up.
 They will assume they have had this initial conversation already and will continue from where they think they have left off.
 
-Importantly, if you add "assiatant" chat turn to the conversation history, the AI will assume that it spoke those words. if you have a "user" chat turn then
+Importantly, if you add "assistant" chat turn to the conversation history, the AI will assume that it spoke those words. if you have a "user" chat turn then
 the AI will assume that the words came from the other AI.
 
 'Curved balls' provide a useful diversion to the chat if you find it gets a bit repetitive. Insert curved ball chats into the conversation history 
