@@ -1,5 +1,5 @@
 {
-    "title": "A chat between the Fonz and Yoda",
+    "title": "Two characters from two different on-screen universes chat to one another",
     "ai_one_model": "llama3",
     "ai_two_model": "llama3",
     "number_of_chat_turns": 20,

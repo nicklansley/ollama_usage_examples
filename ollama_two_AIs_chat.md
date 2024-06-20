@@ -38,7 +38,7 @@ python ollama_two_AIs_chat.py tic_tac_toe
 It's the config file that provides the context for the conversation. You can create your own config file by following the format of the existing ones.
 ```
 {
-    "title": "A game of tic-tac-toe between two AI players",
+    "title": "Two characters from two different on-screen universes chat to one another",
     "ai_one_model": "llama3",
     "ai_two_model": "llama3",
     "number_of_chat_turns": 20,
@@ -118,7 +118,7 @@ Large Language Models work - you have to give them the entire conversation histo
 ```
 python ollama_two_AIs_chat.py fonz_meets_yoda
 
-Starting chat between Fonz and Yoda in A chat between the Fonz and Yoda...
+Starting chat between Fonz and Yoda in Two characters from two different on-screen universes chat to one another...
 
 AI One (Fonz) style is: You are the Fonz from Happy Days but be brief in your answers
 AI Two (Yoda) style is: You are a Yoda from Star Wars. Be brief with your answers, you must.
