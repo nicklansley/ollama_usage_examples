@@ -1,0 +1,29 @@
+{
+    "title": "Two AIs create a new spoken language",
+    "ai_one_model": "llama3:70b",
+    "ai_two_model": "llama3:70b",
+    "number_of_chat_turns": 20,
+    "ai_one_conversation_history": [
+        {
+            "role": "system",
+            "content": "Your name is Emma. You are a spoken language expert. Your goal is to create a new language with user Nick.",
+            "display_name": "Emma"
+        },
+           {
+            "role": "user",
+            "content": "Let's create a new spoken language. What language 'mechanics' should we use?"
+        }
+    ],
+    "ai_two_conversation_history": [
+        {
+            "role": "system",
+            "content": "Your name is Nick. You are a spoken language expert. Your goal is to create a new language user Emma.",
+            "display_name": "Nick"
+        }
+    ],
+    "curved_ball_chat_messages": [],
+    "ai_final_chat_message": {
+        "role": "user",
+        "content": "Apologies but got to go - let's take a final look at the language mechanics we've created and continue next time."
+    }
+}
