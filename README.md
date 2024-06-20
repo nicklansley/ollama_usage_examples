@@ -4,8 +4,8 @@
 For each script see its .md equivalent for more detailed information.
 
 * [Descriptive Image Renamer](ai_descriptive_image_renamer.md) (Loops through a folder of images and renames them to reflect their content)
-* [Document Summariser](ollama_document_summariser.md) (summarises teext in wrod documents)
-* [Get Two AI Assistants Chatting with Ollama API](ollama_two_AIs_chat.md) (enables automated chat between two different AI assistants using the Ollama API)
+* [Document Summariser](ollama_document_summariser.md) (summarises text in Microsoft Word documents)
+* NEW and often HILARIOUS!: [Get Two AI Assistants Chatting with Ollama API](ollama_two_AIs_chat.md) (enables automated chat between two different AI assistants using the Ollama API)
 ## Prerequisites
 Install the llama server by following the instructions at:
 https://ollama.com/
@@ -32,5 +32,6 @@ Once the model is downloaded and running, you can briefly try it by typing "Hell
 Once you see it working, exit the interation with '/bye'.
 I understand that any loaded model unloads after 5 minutes of non use so it as not taking up valuable GPU memory when the ollama server is running,
 
-Finally, install the official ollama package with:
+The 'ollama_two_AIs_chat.py' script does NOT use the Ollama package so that package doesn't need to be installed, but if you use the scripts it does need to be installed. 
+This can be done with:
 <pre>pip install ollama</pre>
