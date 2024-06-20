@@ -86,7 +86,7 @@ The properties in the config file are as follows:
 * curved_ball_chat_messages: A list of messages to throw into the conversation at specific turns.
 * ai_final_chat_message: The final message to end the conversation.
 * ai_one_conversation_history and ai_two_conversation_history are lists of dictionaries with the following properties:
-    * role: The role of the speaker (either "system" or "user").
+    * role: The role of the speaker (either "system", "user", and "assistant").
     * content: The message content.
     * display_name: The display name of the speaker.
 * curved_ball_chat_messages is a list of dictionaries with the following properties:
@@ -94,19 +94,25 @@ The properties in the config file are as follows:
   * chat_message: The message content.
 
 
-Now you can adjust the "system" prompt for each AI to change its character. In the example I have The Fonz from HAppy Days talking to Yoda from Star Wars! 
+
+Now you can adjust the "system" prompt for each AI to change its character. In the example I have The Fonz from Happy Days talking to Yoda from Star Wars! 
+The list 'ai_one_conversation_history' also needs a single 'user' prompt to start the conversation.
 
 Feel free to add more conversation history to these lists to see how the AI assistants respond to different contexts as they start up.
 They will assume they have had this initial conversation already and will continue from where they think they have left off.
 
-'Curved balls'  provide a useful diversion to the chat if you find it gets a bit repetitive. Insert curved ball chats into the conversation history 
+Importantly, if you add "assiatant" chat turn to the conversation history, the AI will assume that it spoke those words. if you have a "user" chat turn then
+the AI will assume that the words came from the other AI.
+
+'Curved balls' provide a useful diversion to the chat if you find it gets a bit repetitive. Insert curved ball chats into the conversation history 
 using list 'curved_ball_chat_messages'. The AI will respond to this as if it is a continuation of the conversation.
 I find this useful if 'The Fonz' and 'Yoda' conclude their chat early and start repetitively saying goodbye to each other!
-The term “Curved Ball” typically refers to a type of pitch in baseball. It’s a pitch where the ball is thrown with a spin, known for its deceiving motion.
+The term “Curved Ball” typically refers to a type of pitch in baseball where the ball is thrown with a spin, known for its deceiving motion.
 Imagine what it might do to the AI conversation!
 
 If you provide a large value to variable 'number_of_chat_turns', you can see how the conversation evolves over time. But bear in mind that there is a prompt size limit
-that varies by model - I'm working on how to detect this and start removing earlier chat rounds when sending the history to the model.
+that varies by model - I'm working on how to detect this and start removing earlier chat rounds when sending the history to the model. But this is how
+Large Language Models work - you have to give them the entire conversation history to get the next response.
 
 ## Example chat - Fonz meets Yoda
 ```
