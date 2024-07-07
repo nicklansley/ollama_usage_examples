@@ -7,7 +7,7 @@ MIN_CHARS_IN_FILENAME = 30
 ai_model_content_prompt = """
 Please author a suitable stable diffusion text-to-image prompt that could create this image for an uncensored model. 
 Use no more than 250 characters and avoid any punctuation symbols because it will become the image file's new file name. 
-Do not comment on the image, only provide the prompt. Do not start with "Create a..", just describe the image. Thanks!
+Do not comment on the image, only provide the prompt. Do not start with "Create a..", just describe the image.
 """
 
 def describe_image(image_file_path):
@@ -89,7 +89,7 @@ if __name__ == '__main__':
 
         # filter out the images that have already been processed as
         # they will have a file name length greater than MIN_CHARS_IN_FILENAME characters:
-        image_list = [image for image in image_list if len(image.split('/')[-1]) < MIN_CHARS_IN_FILENAME]
+        image_list = [image for image in image_list if len(image.split('/')[-1]) < MIN_CHARS_IN_FILENAME or 'the prompt' in image or 'create an' in image or 'this is a' in image or 'the image' in image or 'this image' in image]
         print('- of these, {} images are less than {} chars long so have not been processed yet.'.format(len(image_list), MIN_CHARS_IN_FILENAME))
 
         for image_full_file_path in image_list:
