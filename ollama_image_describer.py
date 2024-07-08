@@ -35,7 +35,7 @@ def describe_image(image_file_path):
 
 
 if __name__ == '__main__':
-    image_full_file_path = '/Volumes/AI Stuff/hanging around/07.jpeg'
+    image_full_file_path = None
     if image_full_file_path is None:
         if len(sys.argv) > 1 and 'file_path=' in sys.argv[1]:
             parser = argparse.ArgumentParser()

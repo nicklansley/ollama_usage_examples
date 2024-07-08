@@ -71,31 +71,35 @@ def convert_description_to_be_filename_friendly(image_desc: str) -> str:
 
 
 def get_image_list(folder_path):
-    import os
-    return [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.endswith('.png') or f.endswith('.jpg') or f.endswith('.jpeg')]
+    return [os.path.join(folder_path, f) for f in os.listdir(folder_path) if
+            (f.endswith('.png') or f.endswith('.jpg') or f.endswith('.jpeg')) and (len(f) < 40 or len(f) > 250 or f[0].isdigit())]
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('file_path', type=str, help='Path to the folder to process')
-    args = parser.parse_args()
-    file_path = args.file_path.replace('file_path=', '')
+    parser.add_argument('--file_path', default=None, type=str, help='Path to the folder to process')
+    try:
+        args = parser.parse_args()
+        file_path = args.file_path
+    except SystemExit:
+        file_path = input("\n\nPlease enter the path to the folder to process: ")
 
     try:
         print('Ollama Image Describer describing files in folder:', file_path)
 
         image_list = get_image_list(file_path)
-        print('Found a total of', len(image_list), 'images')
-
-        # filter out the images that have already been processed as
-        # they will have a file name length greater than MIN_CHARS_IN_FILENAME characters:
-        image_list = [image for image in image_list if len(image.split('/')[-1]) < MIN_CHARS_IN_FILENAME or 'the prompt' in image or 'create an' in image or 'this is a' in image or 'the image' in image or 'this image' in image]
-        print('- of these, {} images are less than {} chars long so have not been processed yet.'.format(len(image_list), MIN_CHARS_IN_FILENAME))
+        print('Found a total of', len(image_list), 'images that require processing')
 
         for image_full_file_path in image_list:
             print('Processing', image_full_file_path, '...')
 
-            description = describe_image(image_full_file_path)
+            description = ''
+            while (len(description) == 0 or
+                   len(description) > 250 or
+                   description.startswith('create') or
+                   description.startswith('this') or
+                   description.startswith('the')):
+                description = describe_image(image_full_file_path)
 
             # convert the description to be filename friendly and add the previous file extension
             new_file_name = convert_description_to_be_filename_friendly(description) + '.' + \
