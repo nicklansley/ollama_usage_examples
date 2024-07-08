@@ -10,6 +10,7 @@ Use no more than 250 characters and avoid any punctuation symbols because it wil
 Do not comment on the image, only provide the prompt. Do not start with "Create a..", just describe the image.
 """
 
+
 def describe_image(image_file_path):
     with open(image_file_path, 'rb') as file:
         response = ollama.chat(
@@ -48,7 +49,7 @@ def convert_description_to_be_filename_friendly(image_desc: str) -> str:
 
     # remove superfluous phrases
     superfluous_phrases_list = ['the image depicts', 'the image features', 'the image is of', 'the image shows',
-                              'the prompt for this image is', 'this is a text based prompt for the ai']
+                                'the prompt for this image is', 'this is a text based prompt for the ai']
     for word in superfluous_phrases_list:
         image_desc = image_desc.replace(word, '')
 
@@ -72,7 +73,8 @@ def convert_description_to_be_filename_friendly(image_desc: str) -> str:
 
 def get_image_list(folder_path):
     return [os.path.join(folder_path, f) for f in os.listdir(folder_path) if
-            (f.endswith('.png') or f.endswith('.jpg') or f.endswith('.jpeg')) and (len(f) < 40 or len(f) > 250 or f[0].isdigit())]
+            (f.endswith('.png') or f.endswith('.jpg') or f.endswith('.jpeg')) and (
+                        len(f) < 40 or len(f) > 250 or f[0].isdigit())]
 
 
 if __name__ == '__main__':
@@ -94,11 +96,13 @@ if __name__ == '__main__':
             print('Processing', image_full_file_path, '...')
 
             description = ''
-            while (len(description) == 0 or
+            while (len(description) < 40 or
                    len(description) > 250 or
                    description.startswith('create') or
                    description.startswith('this') or
                    description.startswith('the')):
+                if description != '':
+                    print('...the description suggested is not valid - having another go...')
                 description = describe_image(image_full_file_path)
 
             # convert the description to be filename friendly and add the previous file extension
