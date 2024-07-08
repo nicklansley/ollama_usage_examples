@@ -72,9 +72,8 @@ def convert_description_to_be_filename_friendly(image_desc: str) -> str:
 
 
 def get_image_list(folder_path):
-    return [os.path.join(folder_path, f) for f in os.listdir(folder_path) if
-            (f.endswith('.png') or f.endswith('.jpg') or f.endswith('.jpeg')) and (
-                        len(f) < 40 or len(f) > 250 or f[0].isdigit())]
+    return [os.path.join(folder_path, f) for f in os.listdir(folder_path)
+        if os.path.isfile(os.path.join(folder_path, f)) and f.lower().endswith(('.png', '.jpg', '.jpeg'))]
 
 
 if __name__ == '__main__':
