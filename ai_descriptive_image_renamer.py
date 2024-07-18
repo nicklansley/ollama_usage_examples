@@ -27,6 +27,40 @@ def describe_image(image_file_path):
     return response['message']['content']
 
 
+def is_image_well_described(image_file_path):
+    # remove the file extension from the file name
+    image_file_name = os.path.basename(image_file_path)
+
+    # we can shortcut this task if ths image file name is too short!
+    if len(image_file_name) < MIN_CHARS_IN_FILENAME:
+        print('    Well described? No, too short!')
+        return False
+
+    with open(image_file_path, 'rb') as file:
+        response = ollama.chat(
+            model='llava:13b',
+            messages=[
+                {
+                    'role': 'system',
+                    'content': 'You make an expert judgement as to whether a given image is well descibed by words provided by the user in quotes. You must only answer "Y" for Yes or "N" for No. Do not provide any other information.',
+                },
+                {
+                    'role': 'user',
+                    'content': 'Is this image well described by the words in quotes? Please answer Y for Yes or N for No. "' + image_file_name + '" ?',
+                    'images': [file.read()],
+                },
+            ],
+        )
+
+    ai_response = response['message']['content'].strip().lower()
+    print('    Well described?', ai_response)
+
+    if ai_response == 'y' or ai_response == 'yes':
+        return True
+    else:
+        return False
+
+
 def convert_description_to_be_filename_friendly(image_desc: str) -> str:
     """Converts a string to be filename friendly.
 
@@ -82,6 +116,8 @@ if __name__ == '__main__':
     try:
         args = parser.parse_args()
         file_path = args.file_path
+        if not file_path:
+            file_path = input("\n\nPlease enter the path to the folder to process: ")
     except SystemExit:
         file_path = input("\n\nPlease enter the path to the folder to process: ")
 
@@ -93,25 +129,27 @@ if __name__ == '__main__':
 
         for image_full_file_path in image_list:
             print('Processing', image_full_file_path, '...')
+            if is_image_well_described(image_full_file_path):
+                print('    The image is well described - skipping...')
+            else:
+                description = ''
+                while (len(description) < 40 or
+                       len(description) > 250 or
+                       description.startswith('create') or
+                       description.startswith('this') or
+                       description.startswith('the')):
+                    if description != '':
+                        print('...the description suggested, "{}" is not valid - having another go...'.format(description))
+                    description = describe_image(image_full_file_path)
 
-            description = ''
-            while (len(description) < 40 or
-                   len(description) > 250 or
-                   description.startswith('create') or
-                   description.startswith('this') or
-                   description.startswith('the')):
-                if description != '':
-                    print('...the description suggested is not valid - having another go...')
-                description = describe_image(image_full_file_path)
+                # convert the description to be filename friendly and add the previous file extension
+                new_file_name = convert_description_to_be_filename_friendly(description) + '.' + \
+                                image_full_file_path.split('.')[-1]
+                print('    New file name:', new_file_name)
 
-            # convert the description to be filename friendly and add the previous file extension
-            new_file_name = convert_description_to_be_filename_friendly(description) + '.' + \
-                            image_full_file_path.split('.')[-1]
-            print('    New file name:', new_file_name)
-
-            # rename the file to the new file name
-            new_file_path = os.path.join(file_path, new_file_name)
-            shutil.move(image_full_file_path, new_file_path)
+                # rename the file to the new file name
+                new_file_path = os.path.join(file_path, new_file_name)
+                shutil.move(image_full_file_path, new_file_path)
 
         print('Ollama Image Describer finished')
     except KeyboardInterrupt:
