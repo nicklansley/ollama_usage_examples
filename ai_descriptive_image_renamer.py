@@ -42,20 +42,20 @@ def is_image_well_described(image_file_path):
             messages=[
                 {
                     'role': 'system',
-                    'content': 'You make an expert judgement as to whether a given image is well descibed by words provided by the user in quotes. You must only answer "Y" for Yes or "N" for No. Do not provide any other information.',
+                    'content': 'You make an expert judgement as to whether a given image is well descibed by the words provided by the user in quotes. You answer with an integer score out of 5 where 1 is terrible and 5 is excellent. Do not provide any other information.',
                 },
                 {
                     'role': 'user',
-                    'content': 'Is this image well described by the words in quotes? Please answer Y for Yes or N for No. "' + image_file_name + '" ?',
+                    'content': 'Is this image well described by the words in quotes? Please provide your integer score between 1 and 5"' + image_file_name + '" ?',
                     'images': [file.read()],
                 },
             ],
         )
 
     ai_response = response['message']['content'].strip().lower()
-    print('    Well described?', ai_response)
+    print('    AI Score:', ai_response)
 
-    if ai_response == 'y' or ai_response == 'yes':
+    if ai_response == '3' or ai_response == '4' or ai_response == '5':
         return True
     else:
         return False
@@ -127,10 +127,12 @@ if __name__ == '__main__':
         image_list = get_image_list(file_path)
         print('Found a total of', len(image_list), 'images that require processing')
 
+        well_described_counter = 0
         for image_full_file_path in image_list:
             print('Processing', image_full_file_path, '...')
             if is_image_well_described(image_full_file_path):
                 print('    The image is well described - skipping...')
+                well_described_counter += 1
             else:
                 description = ''
                 while (len(description) < 40 or
@@ -139,19 +141,19 @@ if __name__ == '__main__':
                        description.startswith('this') or
                        description.startswith('the')):
                     if description != '':
-                        print('...the description suggested, "{}" is not valid - having another go...'.format(description))
+                        print('...the description suggested is not valid - having another go! Attempt was:"{}"'.format(description))
                     description = describe_image(image_full_file_path)
 
                 # convert the description to be filename friendly and add the previous file extension
-                new_file_name = convert_description_to_be_filename_friendly(description) + '.' + \
-                                image_full_file_path.split('.')[-1]
+                new_file_name = convert_description_to_be_filename_friendly(description) + '.' + image_full_file_path.split('.')[-1]
                 print('    New file name:', new_file_name)
 
                 # rename the file to the new file name
                 new_file_path = os.path.join(file_path, new_file_name)
                 shutil.move(image_full_file_path, new_file_path)
 
-        print('Ollama Image Describer finished')
+        print('Ollama Image Describer finished processing', len(image_list), 'images, of which', well_described_counter,
+              'were already well described, a percentage of', round(well_described_counter / len(image_list) * 100, 2), '%')
     except KeyboardInterrupt:
         print('Ollama Image Describer finished and can continue when you next restart it')
     except Exception as e:
