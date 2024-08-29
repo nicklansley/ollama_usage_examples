@@ -9,7 +9,15 @@ import email.message
 import smtplib
 
 load_dotenv()
+# Create a separate .env file in the same directory as this script with the following content:
+# GMAIL_USERNAME=<your gmail-hosted email address>
+# GMAIL_PASSWORD=<your gmail app password>
+# GET_LATEST_MESSAGES=YES
+# USE_AI_TO_SUMMARISE=YES
 messages_list = []
+
+ignore_sender_list = ['nick@lansley.com']
+ai_model = 'llama3.1:latest'
 
 # Account credentials
 gmail_account_username = os.getenv("GMAIL_USERNAME")
@@ -24,7 +32,7 @@ The user will provide you with a message to summarise.
 """
 
 ai_model_category_prompt = """
-You are an expert at categorising email messages.
+You are an expert at categorising email messages into different categories.
 When given an email message, you can categorise it using a single category from the following list
 or you can choose a category of your own as long as it is a single word:
 - Work
@@ -50,9 +58,17 @@ or you can choose a category of your own as long as it is a single word:
 - LGBTQ+
 
 Please provide the category of the email message you think most closely matches the content.
-Only provide your chosen single one category word, and no other words or phrases.
-If you don't do this, the email will be rejected.
+Respond only with a single word. If you don't do this, the email will be rejected.
 """
+
+
+ai_model_overall_summary_prompt = """
+You are an expert at summarising email messages.
+The user will send you a list of email messages and ask you to summarise them into a single paragraph.
+Please summarise the emails into a single paragraph, highlighting anything notable.
+Don't say you are summarising the emails, just do it!
+"""
+
 
 MAX_MESSAGES_TO_PROCESS = 10
 
@@ -83,120 +99,125 @@ def get_gmail_messages():
         print("Email gmail_account_username or gmail_account_password not set in environment variables or .env file")
         exit(1)
 
-    # Connect to the server
-    mail = imaplib.IMAP4_SSL("imap.gmail.com")
+    mail = connect_to_server()
 
-    # Log in to the account
-    mail.login(gmail_account_username, gmail_account_password)
+    message_id_list = get_all_message_ids(mail)
 
-    # Select the mailbox (in this case, the inbox)
-    typ, data = mail.select(mailbox="INBOX")
-
-    # Search for all emails in the inbox
-    status, messages = mail.search(None, "ALL")
-
-    # Convert messages to a list of email IDs
-    message_id_list = messages[0].split()
     print('Total emails:', len(message_id_list))
 
-    # The latest email is the last one in the list, and we need to reverse the list to get the latest email first
-    message_id_list.reverse()
+    messages_list = process_messages(mail, message_id_list)
 
-    # Remove the email IDs that are after the first 100 emails
-    if len(message_id_list) > MAX_MESSAGES_TO_PROCESS:
-        message_id_list = message_id_list[:MAX_MESSAGES_TO_PROCESS]
-
-    # Get the latest 100 emails
-    for current_email_id in message_id_list:
-        # Fetch the email by ID
-        status, msg_data = mail.fetch(current_email_id, "(RFC822)")
-
-        # Get the email content
-        raw_email = msg_data[0][1]
-
-        # Parse the email content
-        msg = email.message_from_bytes(raw_email)
-
-        # Decode unique message id
-        message_id = msg.get('Message-ID')
-        print(f"\nMessage ID: {message_id}")
-
-        # Decode email sender and subject
-        subject, encoding = decode_header(msg["Subject"])[0]
-        if isinstance(subject, bytes):
-            if encoding:
-                subject = subject.decode(encoding)
-            else:
-                subject = subject.decode()
-        sender = msg.get("From")
-
-        date_sent = msg.get("Date")
-        print(f"Date: {date_sent}")
-        print(f"From: {sender}")
-        print(f"Subject: {subject}")
-
-        # Extract the email body
-        body = ''
-
-        if msg.is_multipart():
-            for part in msg.walk():
-                content_type = part.get_content_type()
-                if "text/plain" in content_type:
-                    payload = part.get_payload(decode=True)
-                    if payload:
-                        decoded_payload = payload.decode(errors='ignore')
-                        if '<html' not in decoded_payload:
-                            body += decoded_payload + "\n"
-                        # print("Body:", body)
-
-            message_data = {
-                'message_id': message_id,
-                'date_sent': date_sent,
-                'sender': sender,
-                'subject': subject,
-                'body': format_body(body),
-                'summary': ''
-            }
-            if message_data['body'] != '':
-                messages_list.append(message_data)
-
-            # save messages_List so far to a file
-            with open('messages_list_1.json', 'w') as f:
-                json.dump(messages_list, f)
-
-        else:
-            payload = msg.get_payload(decode=True)
-            decoded_payload = payload.decode(errors='ignore')
-
-            if '<html' not in decoded_payload:
-                body += decoded_payload + "\n"
-
-            message_data = {
-                'message_id': message_id,
-                'date_sent': date_sent,
-                'sender': sender,
-                'subject': subject,
-                'body': format_body(body),
-                'summary': ''
-            }
-
-            if message_data['body'] != '':
-                messages_list.append(message_data)
-
-            # save messages_List so far to a file
-            with open('messages_list_1.json', 'w') as f:
-                json.dump(messages_list, f)
-            # print("Body:", body)
-
-    # Logout and close the connection
     mail.logout()
 
     return messages_list
 
 
+def connect_to_server():
+    mail = imaplib.IMAP4_SSL("imap.gmail.com")
+    mail.login(gmail_account_username, gmail_account_password)
+    return mail
+
+
+def get_all_message_ids(mail):
+    mail.select(mailbox="INBOX")
+    status, messages = mail.search(None, "ALL")
+    message_id_list = messages[0].split()
+    message_id_list.reverse()
+    return message_id_list
+
+
+def process_messages(mail, message_id_list):
+    messages_list = []
+    for current_email_id in message_id_list:
+        if len(messages_list) > MAX_MESSAGES_TO_PROCESS:
+            break
+
+        msg = fetch_email_by_id(mail, current_email_id)
+        msg_data = extract_email_data(msg)
+
+        if msg_data['sender'] in ignore_sender_list:
+            continue
+
+        if msg_data['body'] and len(msg_data['body']) > 0:
+            messages_list.append(msg_data)
+            save_messages_list_to_file(messages_list)
+
+    return messages_list
+
+
+def fetch_email_by_id(mail, email_id):
+    status, msg_data = mail.fetch(email_id, "(RFC822)")
+    raw_email = msg_data[0][1]
+    return email.message_from_bytes(raw_email)
+
+
+def extract_email_data(msg):
+    try:
+        subject = decode_mime_header(msg["Subject"]).replace('\n', '')
+    except:
+        subject = '(no subject)'
+
+    try:
+        sender = msg.get("From")
+    except:
+        sender = '(unknown sender)'
+
+    try:
+        message_id = msg.get('Message-ID')
+    except:
+        message_id = '(unknown message id)'
+
+    try:
+        date_sent = msg.get("Date")
+    except:
+        date_sent = '(unknown date)'
+
+    try:
+        body = extract_body(msg)
+    except:
+        body = ''
+
+    return {
+        'message_id': message_id,
+        'date_sent': date_sent,
+        'sender': sender,
+        'subject': subject,
+        'body': format_body(body),
+        'summary': ''
+    }
+
+
+def decode_mime_header(header_value):
+    decoded_header, encoding = decode_header(header_value)[0]
+    if isinstance(decoded_header, bytes):
+        return decoded_header.decode(encoding or 'utf-8')
+    return decoded_header
+
+
+def extract_body(msg):
+    body = ''
+    if msg.is_multipart():
+        for part in msg.walk():
+            content_type = part.get_content_type()
+            if "text/plain" in content_type:
+                payload = part.get_payload(decode=True)
+                if payload and '<html' not in payload.decode(errors='ignore'):
+                    body += payload.decode(errors='ignore') + "\n"
+    else:
+        payload = msg.get_payload(decode=True)
+        if '<html' not in payload.decode(errors='ignore'):
+            body += payload.decode(errors='ignore') + "\n"
+    return body
+
+
+def save_messages_list_to_file(messages_list):
+    with open('messages_list_1.json', 'w') as f:
+        json.dump(messages_list, f)
+
+
 def describe_email(email_message):
     response = ollama.chat(
-        model='phi3:medium',
+        model=ai_model,
         messages=[
             {
                 'role': 'system',
@@ -213,21 +234,78 @@ def describe_email(email_message):
 
 
 def categorise_email(email_message):
+    chosen_category = ' '
+
+    # The AI should respond with a single word (no spaces). If it does not, make it try again until it does!
+    # This is to ensure that the AI does not provide a multi-word category
+    attempt_count = 0
+    while ' ' in chosen_category and attempt_count < 5:
+        if len(chosen_category) > 1:
+            print('AI did not provide a single word category. Trying again...')
+            print('AI response:', chosen_category)
+        response = ollama.chat(
+            model=ai_model,
+            messages=[
+                {
+                    'role': 'system',
+                    'content': ai_model_category_prompt,
+
+                },
+                {
+                    'role': 'user',
+                    'content': f"Hello! Please give me your recommended category for this email message: '{email_message}'",
+                },
+            ])
+
+        chosen_category = response['message']['content'].strip().replace('\n', '.')
+        attempt_count += 1
+
+    if ' ' in chosen_category and len(chosen_category) > 1:
+        chosen_category = 'Other'
+        print('AI did not provide a single word category. Using default category:', chosen_category)
+    else:
+        print('AI good category response:', chosen_category)
+
+    return chosen_category
+
+
+def summarise_email_list(email_message_list):
+    content = 'Hello, please can you summarise the following emails into a single paragraph, highlighting anything notable:\n\n'
+    for message in email_message_list:
+        content += f"From: {message['sender']}\n"
+        content += f"Subject: {message['subject']}\n"
+        content += f"Body: {message['body']}\n\n"
+
     response = ollama.chat(
-        model='phi3:medium',
+        model=ai_model,
         messages=[
             {
                 'role': 'system',
-                'content': ai_model_category_prompt,
-
+                'content': ai_model_overall_summary_prompt,
             },
             {
                 'role': 'user',
-                'content': f"Hello! Please give me your recommended cateogory for this email message: '{email_message}'",
+                'content': content,
             },
         ])
 
-    return response['message']['content'].strip().replace('\n', '.')
+    ai_response = response['message']['content'].strip().replace('\n', '.')
+
+    # Despite being told not to (!) the AI sometimes starts the summary with a sentence that is a variant of:
+    # "Here is a summary of the emails in a single paragraph".
+    # We remove this sentence if any of the following keywords are present: 'summary', 'paragraph', 'email'.
+    # We deo this by breaking the string into a list of sentences and removing the first one, then
+    # joining the sentences back together again.
+    ai_response_sentences = ai_response.split('.')
+    if 'summary' in ai_response_sentences[0] or 'paragraph' in ai_response_sentences[0] or 'email' in ai_response_sentences[0]:
+        ai_response_sentences.pop(0)
+
+    # Check for any empty-sentence strings and remove them
+    ai_response_sentences = [sentence for sentence in ai_response_sentences if sentence]
+
+    ai_response = '.'.join(ai_response_sentences)
+
+    return ai_response
 
 
 def update_message_list(message_id, summary):
@@ -245,7 +323,22 @@ def author_summary_email(messages_list):
     earliest_message = messages_list[len(messages_list) - 1]["date_sent"]
 
     email_message = f'Here are the summaries of the emails from {earliest_message} to {latest_message}:\n\n'
+
+    # create a list of categories found in messages_list
+    categories_list = []
     for message in messages_list:
+        if message['category'] not in categories_list:
+            categories_list.append(message['category'])
+
+
+    for category in categories_list:
+        filtered_messages_list = [message for message in messages_list if message['category'] == category]
+        email_message += f'Category: {category}\n\n'
+        email_message += 'In ' + category + ', ' + summarise_email_list(filtered_messages_list)
+        email_message += '\n\n'
+
+    for message in messages_list:
+        email_message += '----------------------------------------\n\n'
         email_message += f"From: {message['sender']}\n"
         try:
             email_message += f"Date: {message['date_sent']}\n"
@@ -254,15 +347,10 @@ def author_summary_email(messages_list):
         email_message += f"Subject: {message['subject']}\n"
         email_message += f"Category: {message['category']}\n"
         email_message += f"Summary: {message['summary']}\n\n"
-        email_message += '----------------------------------------\n\n'
     return email_message, earliest_message, latest_message
 
 
 def send_summary_email(email_message, earliest_message_datetime, latest_message_datetime):
-    # Account credentials
-    gmail_account_username = os.getenv("GMAIL_USERNAME")
-    gmail_account_password = os.getenv("GMAIL_PASSWORD")
-
     if not gmail_account_username or not gmail_account_password:
         print("Email gmail_account_username or gmail_account_password not set in environment variables or .env file")
         exit(1)
