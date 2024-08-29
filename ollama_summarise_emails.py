@@ -105,7 +105,7 @@ def get_gmail_messages():
 
     messages_list = fetch_and_filter_messages(mail, message_id_list)
 
-    print(len(messages_list), 'messages from the past 24 hours o process')
+    print(len(messages_list), 'messages from the past 24 hours to process')
     mail.logout()
 
     return messages_list
@@ -394,7 +394,7 @@ if __name__ == '__main__':
         print('Starting email summarisation process...')
         messages_list = get_gmail_messages()
 
-        process_counter = 0
+        process_counter = 1
 
         for message in messages_list:
             print('Processing message:', process_counter, 'of', len(messages_list))
