@@ -335,8 +335,8 @@ def update_message_list(message_id, summary):
 
 def author_summary_email(messages_list):
     # convert the messages_list data into an email message with the summaries
-    latest_message = messages_list[0]["date_sent"]
-    earliest_message = messages_list[len(messages_list) - 1]["date_sent"]
+    earliest_message = messages_list[0]["date_sent"]
+    latest_message = messages_list[len(messages_list) - 1]["date_sent"]
 
     email_message = f'Here are the summaries of the emails from {earliest_message} to {latest_message}:\n\n'
 
