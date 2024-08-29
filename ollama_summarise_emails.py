@@ -1,22 +1,19 @@
-import json
 from datetime import datetime, timedelta, timezone
-
-import ollama
-import email
-from email.header import decode_header
-import imaplib
 from dotenv import load_dotenv
-import os
-import re
+from email.header import decode_header
+import email
 import email.message
+import imaplib
+import ollama
+import os
 import smtplib
 
 load_dotenv()
 # Create a separate .env file in the same directory as this script with the following content:
 # GMAIL_USERNAME=<your gmail-hosted email address>
 # GMAIL_PASSWORD=<your gmail app password>
-# GET_LATEST_MESSAGES=YES
-# USE_AI_TO_SUMMARISE=YES
+# INDIVIDUAL_EMAIL_SUMMARIES=NO  (set to YES if you want individual email summaries)
+
 messages_list = []
 
 ignore_sender_list = ['nick@lansley.com']
@@ -25,6 +22,7 @@ ai_model = 'llama3.1:latest'
 # Account credentials
 gmail_account_username = os.getenv("GMAIL_USERNAME")
 gmail_account_password = os.getenv("GMAIL_PASSWORD")
+INDIVIDUAL_EMAIL_SUMMARIES = os.getenv("INDIVIDUAL_EMAIL_SUMMARIES", "YES") == 'YES'
 
 ai_model_content_prompt = """
 You are an expert at summarising email messages. 
@@ -35,35 +33,35 @@ The user will provide you with a message to summarise.
 """
 
 ai_model_category_prompt = """
-You are an expert at categorising email messages into different categories.
+You are an expert at categorising email messages using a single word category name.
 When given an email message, you can categorise it using a single category from the following list
 or you can choose a category of your own as long as it is a single word:
-- Work
-- Personal
-- Social
-- Promotional
-- News
-- Sport
-- Health
-- Finance
-- Education
-- Travel
-- Food
-- Technology
-- Entertainment
-- Shopping
-- Legal
+- Business
 - Charity
+- Education
+- Entertainment
+- Environment
+- Finance
+- Food
 - Government
+- Health
+- LGBTQ+
+- Legal
+- News
+- Personal
+- Promotional
 - Religion
 - Science
-- Environment
-- LGBTQ+
+- Shopping
+- Social
+- Sport
+- Technology
+- Travel
+- Work
 
 Please provide the category of the email message you think most closely matches the content.
-Respond only with a single word. If you don't do this, the email will be rejected.
+You must respond with only a single word. If you don't do this, the user will ask you again.
 """
-
 
 ai_model_overall_summary_prompt = """
 You are an expert at summarising email messages.
@@ -71,9 +69,6 @@ The user will send you a list of email messages and ask you to summarise them in
 Please summarise the emails into a single paragraph, highlighting anything notable.
 Don't say you are summarising the emails, just do it!
 """
-
-
-MAX_MESSAGES_TO_PROCESS = 10
 
 
 def format_body(body_text):
@@ -148,11 +143,8 @@ def get_all_message_ids(mail):
 
 def fetch_and_filter_messages(mail, message_id_list):
     messages_list = []
-
+    counter = 0
     for current_email_id in message_id_list:
-        if len(messages_list) > MAX_MESSAGES_TO_PROCESS:
-            break
-
         msg = fetch_email_by_id(mail, current_email_id)
         msg_data = extract_email_data(msg)
 
@@ -164,9 +156,12 @@ def fetch_and_filter_messages(mail, message_id_list):
 
         if msg_data['body'] and len(msg_data['body']) > 0:
             messages_list.append(msg_data)
-            save_messages_list_to_file(messages_list)
+            counter += 1
+            if counter % 50 == 0:
+                print(f' - {counter}', end='', flush=True)
+                print()
 
-    print()  # Move to the next line after finishing
+    print(f'{len(messages_list)} messages found')  # Move to the next line after finishing
     return messages_list
 
 
@@ -235,12 +230,7 @@ def extract_body(msg):
     return body
 
 
-def save_messages_list_to_file(messages_list):
-    with open('messages_list_1.json', 'w') as f:
-        json.dump(messages_list, f)
-
-
-def describe_email(email_message):
+def ai_summarise_email(email_message):
     response = ollama.chat(
         model=ai_model,
         messages=[
@@ -258,7 +248,7 @@ def describe_email(email_message):
     return response['message']['content'].strip().replace('\n', '.')
 
 
-def categorise_email(email_message):
+def ai_categorise_email(email_message):
     chosen_category = ' '
 
     # The AI should respond with a single word (no spaces). If it does not, make it try again until it does!
@@ -291,10 +281,10 @@ def categorise_email(email_message):
     else:
         print('AI good category response:', chosen_category)
 
-    return chosen_category
+    return chosen_category.replace('.', '').upper()  # remove any stray periods and make uppercase
 
 
-def summarise_email_list(email_message_list):
+def ai_summarise_email_list(email_message_list):
     content = 'Hello, please can you summarise the following emails into a single paragraph, highlighting anything notable:\n\n'
     for message in email_message_list:
         content += f"From: {message['sender']}\n"
@@ -322,7 +312,8 @@ def summarise_email_list(email_message_list):
     # We deo this by breaking the string into a list of sentences and removing the first one, then
     # joining the sentences back together again.
     ai_response_sentences = ai_response.split('.')
-    if 'summary' in ai_response_sentences[0] or 'paragraph' in ai_response_sentences[0] or 'email' in ai_response_sentences[0]:
+    if 'summary' in ai_response_sentences[0] or 'paragraph' in ai_response_sentences[0] or 'email' in \
+            ai_response_sentences[0]:
         ai_response_sentences.pop(0)
 
     # Check for any empty-sentence strings and remove them
@@ -355,23 +346,25 @@ def author_summary_email(messages_list):
         if message['category'] not in categories_list:
             categories_list.append(message['category'])
 
-
     for category in categories_list:
+        print('Asking AI to summarise emails in category:', category)
         filtered_messages_list = [message for message in messages_list if message['category'] == category]
-        email_message += f'Category: {category}\n\n'
-        email_message += 'In ' + category + ', ' + summarise_email_list(filtered_messages_list)
+        email_message += f'Category: {category}\n'
+        email_message += ai_summarise_email_list(filtered_messages_list)
         email_message += '\n\n'
 
-    for message in messages_list:
-        email_message += '----------------------------------------\n\n'
-        email_message += f"From: {message['sender']}\n"
-        try:
-            email_message += f"Date: {message['date_sent']}\n"
-        except:
-            email_message += "Date: (unknown)\n"
-        email_message += f"Subject: {message['subject']}\n"
-        email_message += f"Category: {message['category']}\n"
-        email_message += f"Summary: {message['summary']}\n\n"
+    if INDIVIDUAL_EMAIL_SUMMARIES:
+        for message in messages_list:
+            email_message += '----------------------------------------\n\n'
+            email_message += f"From: {message['sender']}\n"
+            try:
+                email_message += f"Date: {message['date_sent']}\n"
+            except:
+                email_message += "Date: (unknown)\n"
+            email_message += f"Subject: {message['subject']}\n"
+            email_message += f"Category: {message['category']}\n"
+            email_message += f"Summary: {message['summary']}\n\n"
+
     return email_message, earliest_message, latest_message
 
 
@@ -406,15 +399,15 @@ if __name__ == '__main__':
         for message in messages_list:
             print('Processing message:', process_counter, 'of', len(messages_list))
             email_text = message['body']
-            message['summary'] = describe_email(email_text)
-            message['category'] = categorise_email(email_text)
+            message['category'] = ai_categorise_email(email_text)
+
+            if INDIVIDUAL_EMAIL_SUMMARIES:
+                message['summary'] = ai_summarise_email(email_text)
 
             # update messages with summary by matching message_id
             update_message_list(message['message_id'], message['summary'])
 
-            # save messages_List so far to a file
-            with open('messages_list_1.json', 'w') as f:
-                json.dump(messages_list, f)
+            process_counter += 1
 
         print('All emails summarised successfully - now authoring summary email')
         email_message, earliest_message_datetime, latest_message_datetime = author_summary_email(messages_list)
@@ -423,13 +416,9 @@ if __name__ == '__main__':
         send_summary_email(email_message, earliest_message_datetime, latest_message_datetime)
 
     except KeyboardInterrupt:
-        with open('messages_list_1.json', 'w') as f:
-            json.dump(messages_list, f)
         print('Process interrupted by user')
         exit(0)
 
     except Exception as e:
-        with open('messages_list_1.json', 'w') as f:
-            json.dump(messages_list, f)
         print('Error:', e)
         exit(1)
