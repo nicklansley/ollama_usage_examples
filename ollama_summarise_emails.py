@@ -1,10 +1,13 @@
 import json
+from datetime import datetime, timedelta, timezone
+
 import ollama
 import email
 from email.header import decode_header
 import imaplib
 from dotenv import load_dotenv
 import os
+import re
 import email.message
 import smtplib
 
@@ -103,10 +106,11 @@ def get_gmail_messages():
 
     message_id_list = get_all_message_ids(mail)
 
-    print('Total emails:', len(message_id_list))
+    print('Total emails found in Inbox:', len(message_id_list))
 
-    messages_list = process_messages(mail, message_id_list)
+    messages_list = fetch_and_filter_messages(mail, message_id_list)
 
+    print(len(messages_list), 'messages from the past 24 hours o process')
     mail.logout()
 
     return messages_list
@@ -119,21 +123,41 @@ def connect_to_server():
 
 
 def get_all_message_ids(mail):
-    mail.select(mailbox="INBOX")
-    status, messages = mail.search(None, "ALL")
-    message_id_list = messages[0].split()
-    message_id_list.reverse()
-    return message_id_list
+    try:
+        # Select the INBOX
+        status, messages = mail.select("inbox")
+        if status != 'OK':
+            print("Error selecting inbox!")
+            return []
+
+        # Calculate the IMAP date string for 24 hours ago
+        date_24_hours_ago = (datetime.now() - timedelta(days=1)).strftime('%d-%b-%Y')
+        search_criteria = f'(SINCE {date_24_hours_ago})'
+
+        status, data = mail.search(None, search_criteria)
+        if status != 'OK':
+            print("No messages found!")
+            return []
+
+        message_ids = data[0].split()
+        return message_ids
+    except Exception as e:
+        print(f'Error fetching message IDs: {e}')
+        return []
 
 
-def process_messages(mail, message_id_list):
+def fetch_and_filter_messages(mail, message_id_list):
     messages_list = []
+
     for current_email_id in message_id_list:
         if len(messages_list) > MAX_MESSAGES_TO_PROCESS:
             break
 
         msg = fetch_email_by_id(mail, current_email_id)
         msg_data = extract_email_data(msg)
+
+        # Print a dot to indicate progress
+        print('.', end='', flush=True)
 
         if msg_data['sender'] in ignore_sender_list:
             continue
@@ -142,6 +166,7 @@ def process_messages(mail, message_id_list):
             messages_list.append(msg_data)
             save_messages_list_to_file(messages_list)
 
+    print()  # Move to the next line after finishing
     return messages_list
 
 
@@ -373,38 +398,29 @@ def send_summary_email(email_message, earliest_message_datetime, latest_message_
 
 if __name__ == '__main__':
     try:
-        if os.getenv('GET_LATEST_MESSAGES') == 'YES':
-            messages_list = get_gmail_messages()
+        print('Starting email summarisation process...')
+        messages_list = get_gmail_messages()
 
-        else:
-            with open('messages_list_1.json', 'r') as f:
-                messages_list = json.load(f)
+        process_counter = 0
 
-        if os.getenv('USE_AI_TO_SUMMARISE') == 'YES':
-            for message in messages_list:
-                email_text = message['body']
-                message['summary'] = describe_email(email_text)
-                message['category'] = categorise_email(email_text)
+        for message in messages_list:
+            print('Processing message:', process_counter, 'of', len(messages_list))
+            email_text = message['body']
+            message['summary'] = describe_email(email_text)
+            message['category'] = categorise_email(email_text)
 
-                print('Message from:', message['sender'], 'with subject:', message['subject'])
-                print('AI Summary:', message['summary'])
-                print('AI Category:', message['category'])
-                print()
+            # update messages with summary by matching message_id
+            update_message_list(message['message_id'], message['summary'])
 
-                # update messages with summary by matching message_id
-                update_message_list(message['message_id'], message['summary'])
+            # save messages_List so far to a file
+            with open('messages_list_1.json', 'w') as f:
+                json.dump(messages_list, f)
 
-                # save messages_List so far to a file
-                with open('messages_list_1.json', 'w') as f:
-                    json.dump(messages_list, f)
-        else:
-            with open('messages_list_1.json', 'r') as f:
-                messages_list = json.load(f)
-
-        print('All emails summarised successfully - now authoring and sending summary email to', gmail_account_username)
+        print('All emails summarised successfully - now authoring summary email')
         email_message, earliest_message_datetime, latest_message_datetime = author_summary_email(messages_list)
-        send_summary_email(email_message, earliest_message_datetime, latest_message_datetime)
 
+        print('Now sending summary email to', gmail_account_username)
+        send_summary_email(email_message, earliest_message_datetime, latest_message_datetime)
 
     except KeyboardInterrupt:
         with open('messages_list_1.json', 'w') as f:
