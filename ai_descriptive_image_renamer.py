@@ -42,7 +42,7 @@ def is_image_well_described(image_file_path):
             messages=[
                 {
                     'role': 'system',
-                    'content': 'You make an expert judgement as to whether a given image is well descibed by the words provided by the user in quotes. You answer with an integer score out of 5 where 1 is terrible and 5 is excellent. Do not provide any other information.',
+                    'content': 'You make an expert judgement as to whether a given image is well descibed by the words provided by the user in quotes. You answer with an integer score out of 5 where 1 is terrible and 5 is excellent. Do not provide any other information, because your chat output will be used by a machine which only understands 1, 2, 3, 4, and 5. It will use your score to decide whether to have the image renamed or not.',
                 },
                 {
                     'role': 'user',
