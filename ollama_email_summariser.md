@@ -7,9 +7,8 @@ It then uses Ollama AI to summarise the content of the emails and then send a si
 
 - Python 3.9+
 - Access to a Gmail account
-- Necessary IMAP libraries installed (`imaplib` and others if needed)
 - DotEnv and Ollama AI Python packages installed
-- Ollama server running with an appropriate AI model loaded (the script uses 'llama3.1:latest' by default)
+- Ollama server running with an appropriate AI models loaded (see below)
 
 ## Requirements
 
@@ -33,9 +32,9 @@ pip install python_dotenv ollama
     - Navigate to the "Security" section.
     - Enable "Less secure app access". (Note: This setting may not be available if you have 2-Step Verification enabled. In that case, consider using an App Password).
 
-### Update Script with Your Credentials
 
-### Running the Script
+
+## Running the Script
 
 Set up a .env file with the following content:
 
@@ -47,6 +46,24 @@ INDIVIDUAL_EMAIL_SUMMARIES=NO
 You can set INDIVIDUAL_EMAIL_SUMMARIES to YES if you want to process each email with individual summaries.
 This will take longer to run.
 
+### Setting up the two models
+The script uses two models - a large model for summarising and smaller (so faster) model for categorising.
+Choose the two models that are as large as possible while still being able to run on your hardware in a reasonable time.
+Make sure you have downloaded the models before running the script using the command:
+```bash
+ollama pull <model name>
+
+```
+Place the models towards the top of the script into these two variables:
+```python
+categorising_ai_model = 'llama3.1:latest'
+summarising_ai_model = 'llama3.1:70b'
+```
+Finally, you probably don't want the script to summaruse your own messages. 
+You can add your email address to the list of exclusions - and add other emails if you want to exclude them too.
+```python
+ignore_sender_list = ['you@your_gmail_hosted_email_address.com']
+```
 
 ## Contributing
 

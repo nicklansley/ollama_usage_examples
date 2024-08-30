@@ -16,8 +16,9 @@ load_dotenv()
 
 messages_list = []
 
-ignore_sender_list = ['nick@lansley.com']
-ai_model = 'llama3.1:latest'
+ignore_sender_list = ['you@your_gmail_hosted_email_address.com']
+categorising_ai_model = 'llama3.1:latest'
+summarising_ai_model = 'llama3.1:70b'
 
 # Account credentials
 gmail_account_username = os.getenv("GMAIL_USERNAME")
@@ -34,8 +35,10 @@ The user will provide you with a message to summarise.
 
 ai_model_category_prompt = """
 You are an expert at categorising email messages using a single word category name.
-When given an email message, you can categorise it using a single category from the following list
-or you can choose a category of your own as long as it is a single word:
+If necessary you can choose a category of your own as long as it is a single word.
+Please provide the category of the email message you think most closely matches the content.
+You must respond with only a single word which is your chosen category. Do not respond with multiple words or sentences.
+If you don't do this, your output will be useless. Here is a list of possible categories:
 - Business
 - Charity
 - Education
@@ -58,25 +61,36 @@ or you can choose a category of your own as long as it is a single word:
 - Technology
 - Travel
 - Work
-
-Please provide the category of the email message you think most closely matches the content.
-You must respond with only a single word. If you don't do this, the user will ask you again.
 """
 
 ai_model_overall_summary_prompt = """
 You are an expert at summarising email messages.
-The user will send you a list of email messages and ask you to summarise them into a single paragraph.
-Please summarise the emails into a single paragraph, highlighting anything notable.
-Don't say you are summarising the emails, just do it!
+The user will send you a list of email messages and ask you to summarise them into a single paragraph,
+highlighting anything notable, that would be a useful script for a newsreader to read out on the radio.
+Please be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats.
 """
-
-
 def format_body(body_text):
-    # remove newlines, carriage returns, weird characters and extra spaces
-    body_text = body_text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').replace('\u200c', ' ')
-    body_text = body_text.replace('\u2019', ' ').replace('\ud83d', ' ').replace('\udc9a', ' ').replace('\u00a9', ' ')
-    body_text = body_text.replace('\u2014', ' ').replace('\u2013', '').replace('\u2012', '').replace('\u201c', ' ')
-    body_text = body_text.replace('\u201d', '').replace('\u2018', ' ')
+    # Array of search and replacement pairs
+    replacements = [
+        ('\n', ' '),
+        ('\r', ' '),
+        ('\t', ' '),
+        ('\u200c', ' '),
+        ('\u2019', ' '),
+        ('\ud83d', ' '),
+        ('\udc9a', ' '),
+        ('\u00a9', ' '),
+        ('\u2014', ' '),
+        ('\u2013', ''),
+        ('\u2012', ''),
+        ('\u201c', ' '),
+        ('\u201d', ''),
+        ('\u2018', ' ')
+    ]
+
+    # Perform replacements using a loop
+    for search, replacement in replacements:
+        body_text = body_text.replace(search, replacement)
 
     while '  ' in body_text:
         body_text = body_text.replace('  ', ' ')
@@ -161,7 +175,7 @@ def fetch_and_filter_messages(mail, message_id_list):
                 print(f' - {counter}', end='', flush=True)
                 print()
 
-    print(f'{len(messages_list)} messages found')  # Move to the next line after finishing
+    print(f'{len(messages_list)} messages found with readable text in the body of the message')  # Move to the next line after finishing
     return messages_list
 
 
@@ -216,23 +230,34 @@ def decode_mime_header(header_value):
 
 def extract_body(msg):
     body = ''
+
+    def decode_payload(payload):
+        # Decode only once and check for HTML
+        if payload:
+            decoded_payload = payload.decode(errors='ignore')
+            if '<html' not in decoded_payload:
+                return decoded_payload + "\n"
+        return ''
+
     if msg.is_multipart():
         for part in msg.walk():
             content_type = part.get_content_type()
             if "text/plain" in content_type:
                 payload = part.get_payload(decode=True)
-                if payload and '<html' not in payload.decode(errors='ignore'):
-                    body += payload.decode(errors='ignore') + "\n"
+                body += decode_payload(payload)
     else:
         payload = msg.get_payload(decode=True)
-        if '<html' not in payload.decode(errors='ignore'):
-            body += payload.decode(errors='ignore') + "\n"
+        body += decode_payload(payload)
+
     return body
 
 
 def ai_summarise_email(email_message):
     response = ollama.chat(
-        model=ai_model,
+        model=summarising_ai_model,
+        options={
+            "num_ctx": 130000
+        },
         messages=[
             {
                 'role': 'system',
@@ -259,7 +284,10 @@ def ai_categorise_email(email_message):
             print('AI did not provide a single word category. Trying again...')
             print('AI response:', chosen_category)
         response = ollama.chat(
-            model=ai_model,
+            model=categorising_ai_model,
+            options={
+                "num_ctx": 130000
+            },
             messages=[
                 {
                     'role': 'system',
@@ -292,7 +320,10 @@ def ai_summarise_email_list(email_message_list):
         content += f"Body: {message['body']}\n\n"
 
     response = ollama.chat(
-        model=ai_model,
+        model=summarising_ai_model,
+        options={
+            "num_ctx": 130000
+        },
         messages=[
             {
                 'role': 'system',
@@ -338,7 +369,7 @@ def author_summary_email(messages_list):
     earliest_message = messages_list[0]["date_sent"]
     latest_message = messages_list[len(messages_list) - 1]["date_sent"]
 
-    email_message = f'Here are the summaries of the emails from {earliest_message} to {latest_message}:\n\n'
+    email_message = f"Here are the '{categorising_ai_model}' AI-powered summaries of the emails from {earliest_message} to {latest_message}:\n\n"
 
     # create a list of categories found in messages_list
     categories_list = []
@@ -391,7 +422,8 @@ def send_summary_email(email_message, earliest_message_datetime, latest_message_
 
 if __name__ == '__main__':
     try:
-        print('Starting email summarisation process...')
+        start_time = datetime.now(timezone.utc)
+        print(f'Starting email summarisation process at {start_time}')
         messages_list = get_gmail_messages()
 
         process_counter = 1
@@ -414,6 +446,10 @@ if __name__ == '__main__':
 
         print('Now sending summary email to', gmail_account_username)
         send_summary_email(email_message, earliest_message_datetime, latest_message_datetime)
+
+        end_time = datetime.now(timezone.utc)
+        print(f'Email summarisation process completed at {end_time}')
+        print(f'Total time taken: {end_time - start_time}')
 
     except KeyboardInterrupt:
         print('Process interrupted by user')
