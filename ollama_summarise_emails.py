@@ -16,7 +16,7 @@ load_dotenv()
 
 messages_list = []
 
-ignore_sender_list = ['ignore@ignoreme.com']
+ignore_sender_list = ['nick@lansley.com']
 
 # AI models to use for email summarisation
 # These models are available from the Ollama AI website: https://ollama.com/ and must be downloaded first
@@ -32,7 +32,10 @@ summarising_ai_model = 'llama3.1:latest'
 # Account credentials
 gmail_account_username = os.getenv("GMAIL_USERNAME")
 gmail_account_password = os.getenv("GMAIL_PASSWORD")
+
 INDIVIDUAL_EMAIL_SUMMARIES = os.getenv("INDIVIDUAL_EMAIL_SUMMARIES", "YES") == 'YES'
+
+HOURS_TO_FETCH = 8
 
 ai_model_content_prompt = """
 You are an expert at summarising email messages. 
@@ -40,6 +43,13 @@ You prefer to use clauses instead of complete sentences in order to make your su
 Please be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats.
 Do not answer any questions you may find in the messages. 
 The user will provide you with a message to summarise.
+"""
+
+ai_model_headline_summary_prompt = """
+You are an expert scriptwriter for a news radio station. You will be given a set of grouped paragraphs that have
+been summarized within each group, and you are to respond with an overall news script that will be read aloud by the newsreader.
+The script will be read aloud so please ensure it is engaging and informative.
+Do not add any of your own observations, notes, opinions or comments in case they are accidentally read aloud by the newsreader!
 """
 
 ai_model_category_prompt = """
@@ -73,10 +83,13 @@ If you don't do this, your output will be useless. Here is a list of possible ca
 """
 
 ai_model_overall_summary_prompt = """
-You are an expert at summarising email messages.
-The user will send you a list of email messages and ask you to summarise them into a single paragraph,
-highlighting anything notable, that would be a useful script for a newsreader to read out on the radio.
-Please be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats.
+You are an expert scriptwriter for a news radio station. You are tasked with summarising a list of email messages into
+a single paragraph that will be read aloud at the next news bulletin. The user will send you a list of email messages 
+and ask you to summarise them, highlighting anything notable. Your summary needs to be engaging and informative,
+even if the emails are not.
+Please be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats
+because the newsreader will be reading your summary aloud.
+Don't add any of your own observations, notes opinions or comments in case they are accidentally read aloud by the newsreader!
 """
 def format_body(body_text):
     # Array of search and replacement pairs
@@ -128,7 +141,7 @@ def get_gmail_messages():
 
     messages_list = fetch_and_filter_messages(mail, message_id_list)
 
-    print(len(messages_list), 'messages from the past 24 hours to process')
+    print(len(messages_list), f'messages from the past {HOURS_TO_FETCH} hours to process')
     mail.logout()
 
     return messages_list
@@ -148,9 +161,9 @@ def get_all_message_ids(mail):
             print("Error selecting inbox!")
             return []
 
-        # Calculate the IMAP date string for 24 hours ago
-        date_24_hours_ago = (datetime.now() - timedelta(days=1)).strftime('%d-%b-%Y')
-        search_criteria = f'(SINCE {date_24_hours_ago})'
+        # Calculate the IMAP date string for HOURS_TO_FETCH hours ago
+        date_hours_ago = (datetime.now() - timedelta(hours=HOURS_TO_FETCH)).strftime('%d-%b-%Y')
+        search_criteria = f'(SINCE {date_hours_ago})'
 
         status, data = mail.search(None, search_criteria)
         if status != 'OK':
@@ -261,7 +274,7 @@ def extract_body(msg):
     return body
 
 
-def ai_summarise_email(email_message):
+def ai_summarise_email(email_content):
     response = ollama.chat(
         model=summarising_ai_model,
         options={
@@ -275,14 +288,14 @@ def ai_summarise_email(email_message):
             },
             {
                 'role': 'user',
-                'content': f"Hello! Please use your expertise to summarise this email: '{email_message}'",
+                'content': email_content,
             },
         ])
 
     return response['message']['content'].strip().replace('\n', '.')
 
 
-def ai_categorise_email(email_message):
+def ai_categorise_email(email_content):
     chosen_category = ' '
 
     # The AI should respond with a single word (no spaces). If it does not, make it try again until it does!
@@ -305,8 +318,8 @@ def ai_categorise_email(email_message):
                 },
                 {
                     'role': 'user',
-                    'content': f"Hello! Please give me your recommended category for this email message: '{email_message}'",
-                },
+                    'content': email_content,
+                }
             ])
 
         chosen_category = response['message']['content'].strip().replace('\n', '.')
@@ -331,17 +344,22 @@ def ai_categorise_email(email_message):
         chosen_category = 'POLITICS'
     elif 'REALESTATE' in chosen_category.upper():
         chosen_category = 'PROPERTY'
-
+    elif 'CALENDAR' in chosen_category.upper():
+        chosen_category = 'PERSONAL'
+    elif 'PROMOTIONAL' in chosen_category.upper():
+        chosen_category = 'PROMOTIONAL & SHOPPING'
+    elif 'SHOPPING' in chosen_category.upper():
+        chosen_category = 'PROMOTIONAL & SHOPPING'
 
     return chosen_category.replace('.', '').upper()  # remove any stray periods and make uppercase
 
 
 def ai_summarise_email_list(email_message_list):
-    content = 'Hello, please can you summarise the following emails into a single paragraph, highlighting anything notable:\n\n'
-    for message in email_message_list:
-        content += f"From: {message['sender']}\n"
-        content += f"Subject: {message['subject']}\n"
-        content += f"Body: {message['body']}\n\n"
+    content = ''
+    for message_data in email_message_list:
+        content += f"From: {message_data['sender']}\n"
+        content += f"Subject: {message_data['subject']}\n"
+        content += f"Body: {message_data['body']}\n\n"
 
     response = ollama.chat(
         model=summarising_ai_model,
@@ -367,8 +385,7 @@ def ai_summarise_email_list(email_message_list):
     # We deo this by breaking the string into a list of sentences and removing the first one, then
     # joining the sentences back together again.
     ai_response_sentences = ai_response.split('.')
-    if 'summary' in ai_response_sentences[0] or 'paragraph' in ai_response_sentences[0] or 'email' in \
-            ai_response_sentences[0]:
+    if 'summary' in ai_response_sentences[0] or 'paragraph' in ai_response_sentences[0]:
         ai_response_sentences.pop(0)
 
     # Check for any empty-sentence strings and remove them
@@ -377,6 +394,29 @@ def ai_summarise_email_list(email_message_list):
     ai_response = '.'.join(ai_response_sentences)
 
     return ai_response
+
+
+def ai_author_top_headlines(summarised_group_content):
+    print('Authoring top headlines summary...')
+    content = ''
+
+    response = ollama.chat(
+        model=summarising_ai_model,
+        options={
+            "num_ctx": 130000
+        },
+        messages=[
+            {
+                'role': 'system',
+                'content': ai_model_headline_summary_prompt,
+            },
+            {
+                'role': 'user',
+                'content': summarised_group_content,
+            },
+        ])
+
+    return response['message']['content'].strip()
 
 
 def update_message_list(message_id, summary):
@@ -393,7 +433,7 @@ def author_summary_email(messages_list):
     earliest_message = messages_list[0]["date_sent"]
     latest_message = messages_list[len(messages_list) - 1]["date_sent"]
 
-    email_message = f"Here are the '{categorising_ai_model}' AI-powered summaries of the emails from {earliest_message} to {latest_message}:\n\n"
+    email_message = f"Here are the AI-powered summaries of the emails from {earliest_message} to {latest_message}:\n\n"
 
     # create a list of categories found in messages_list
     categories_list = []
@@ -401,20 +441,31 @@ def author_summary_email(messages_list):
         if message['category'] not in categories_list:
             categories_list.append(message['category'])
 
-    print('Categories found: ', categories_list)
+    # Sort the categories alphabetically
+    categories_list.sort()
 
-    # Always have the NEWS category first
+    # Always have the PERSONAL category first and NEWS category second:
+    if 'PERSONAL' in categories_list:
+        categories_list.remove('PERSONAL')
+        categories_list.insert(0, 'PERSONAL')
+
     if 'NEWS' in categories_list:
         categories_list.remove('NEWS')
-        categories_list.insert(0, 'NEWS')
+        categories_list.insert(1, 'NEWS')
+
+    print('Categories found: ', categories_list)
+
 
     for category in categories_list:
-        print('Asking AI to summarise emails in category:', category)
         filtered_messages_list = [message for message in messages_list if message['category'] == category]
+        print(f'Asking AI to summarise {len(filtered_messages_list)} emails in category: {category}')
 
         email_message += f'Category: {category}\n'
         email_message += ai_summarise_email_list(filtered_messages_list)
         email_message += '\n\n'
+
+    # Now provide the overall headline summary
+    email_message = 'Overall Headline Summary:\n' + ai_author_top_headlines(email_message) + '\n\n' + email_message
 
     if INDIVIDUAL_EMAIL_SUMMARIES:
         for message in messages_list:
