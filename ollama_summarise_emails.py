@@ -16,9 +16,18 @@ load_dotenv()
 
 messages_list = []
 
-ignore_sender_list = ['you@your_gmail_hosted_email_address.com']
+ignore_sender_list = ['nick@lansley.com']
+
+# AI models to use for email summarisation
+# These models are available from the Ollama AI website: https://ollama.com/ and must be downloaded first
+# using 'ollama pull model_name:version' command in the terminal, then appear in 'ollama list' list of models.
+# Note that I am finding 'llama3.1:latest' to be the best for both categorising and summarising emails!
+
+# Use a smaller model for categorising emails *but not too small as it may not be able to categorise well*
 categorising_ai_model = 'llama3.1:latest'
-summarising_ai_model = 'llama3.1:70b'
+
+# Use a larger model for summarising email content *but not too large as it may take too long to summarise well*
+summarising_ai_model = 'llama3.1:latest'
 
 # Account credentials
 gmail_account_username = os.getenv("GMAIL_USERNAME")
@@ -309,6 +318,21 @@ def ai_categorise_email(email_message):
     else:
         print('AI good category response:', chosen_category)
 
+    # Often an AI will categorise some emails as 'LGBT', 'LGBTQ' or 'LGBTQ+'. This code will standardise these to 'LGBTQ+'
+    # so that the category is consistent when the AI later summarises the emails by category.
+    # It will also standardise 'MARKETING' and 'EVENT' to 'PROMOTIONAL' and 'GOVERNMENT' to 'POLITICS'.
+    if 'LGBT' in chosen_category:
+        chosen_category = 'LGBTQ+'
+    elif 'MARKETING' in chosen_category.upper():
+        chosen_category = 'PROMOTIONAL'
+    elif 'EVENT' in chosen_category.upper():
+        chosen_category = 'PROMOTIONAL'
+    elif 'GOVERNMENT' in chosen_category.upper():
+        chosen_category = 'POLITICS'
+    elif 'REALESTATE' in chosen_category.upper():
+        chosen_category = 'PROPERTY'
+
+
     return chosen_category.replace('.', '').upper()  # remove any stray periods and make uppercase
 
 
@@ -377,9 +401,17 @@ def author_summary_email(messages_list):
         if message['category'] not in categories_list:
             categories_list.append(message['category'])
 
+    print('Categories found: ', categories_list)
+
+    # Always have the NEWS category first
+    if 'NEWS' in categories_list:
+        categories_list.remove('NEWS')
+        categories_list.insert(0, 'NEWS')
+
     for category in categories_list:
         print('Asking AI to summarise emails in category:', category)
         filtered_messages_list = [message for message in messages_list if message['category'] == category]
+
         email_message += f'Category: {category}\n'
         email_message += ai_summarise_email_list(filtered_messages_list)
         email_message += '\n\n'
