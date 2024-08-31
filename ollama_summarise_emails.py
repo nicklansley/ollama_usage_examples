@@ -91,6 +91,8 @@ Please be brief and to the point in a single paragraph. Don't use bullet points,
 because the newsreader will be reading your summary aloud.
 Don't add any of your own observations, notes opinions or comments in case they are accidentally read aloud by the newsreader!
 """
+
+
 def format_body(body_text):
     # Array of search and replacement pairs
     replacements = [
@@ -178,7 +180,7 @@ def get_all_message_ids(mail):
 
 
 def fetch_and_filter_messages(mail, message_id_list):
-    messages_list = []
+    email_list = []
     counter = 0
     for current_email_id in message_id_list:
         msg = fetch_email_by_id(mail, current_email_id)
@@ -191,14 +193,15 @@ def fetch_and_filter_messages(mail, message_id_list):
             continue
 
         if msg_data['body'] and len(msg_data['body']) > 0:
-            messages_list.append(msg_data)
+            email_list.append(msg_data)
             counter += 1
             if counter % 50 == 0:
                 print(f' - {counter}', end='', flush=True)
                 print()
 
-    print(f'{len(messages_list)} messages found with readable text in the body of the message')  # Move to the next line after finishing
-    return messages_list
+    print(
+        f'{len(email_list)} messages found with readable text in the body of the message')  # Move to the next line after finishing
+    return email_list
 
 
 def fetch_email_by_id(mail, email_id):
@@ -253,10 +256,10 @@ def decode_mime_header(header_value):
 def extract_body(msg):
     body = ''
 
-    def decode_payload(payload):
+    def decode_payload(encoded_payload):
         # Decode only once and check for HTML
-        if payload:
-            decoded_payload = payload.decode(errors='ignore')
+        if encoded_payload:
+            decoded_payload = encoded_payload.decode(errors='ignore')
             if '<html' not in decoded_payload:
                 return decoded_payload + "\n"
         return ''
@@ -295,34 +298,37 @@ def ai_summarise_email(email_content):
     return response['message']['content'].strip().replace('\n', '.')
 
 
+def call_ai_model(model, prompt, user_content, num_ctx=130000):
+    response = ollama.chat(
+        model=model,
+        options={
+            "num_ctx": num_ctx
+        },
+        messages=[
+            {
+                'role': 'system',
+                'content': prompt,
+            },
+            {
+                'role': 'user',
+                'content': user_content,
+            },
+        ])
+
+    return response['message']['content'].strip()
+
+
 def ai_categorise_email(email_content):
     chosen_category = ' '
-
-    # The AI should respond with a single word (no spaces). If it does not, make it try again until it does!
-    # This is to ensure that the AI does not provide a multi-word category
     attempt_count = 0
+
     while ' ' in chosen_category and attempt_count < 5:
         if len(chosen_category) > 1:
             print('AI did not provide a single word category. Trying again...')
             print('AI response:', chosen_category)
-        response = ollama.chat(
-            model=categorising_ai_model,
-            options={
-                "num_ctx": 130000
-            },
-            messages=[
-                {
-                    'role': 'system',
-                    'content': ai_model_category_prompt,
 
-                },
-                {
-                    'role': 'user',
-                    'content': email_content,
-                }
-            ])
-
-        chosen_category = response['message']['content'].strip().replace('\n', '.')
+        chosen_category = call_ai_model(categorising_ai_model, ai_model_category_prompt, email_content)
+        chosen_category = chosen_category.replace('\n', '.')
         attempt_count += 1
 
     if ' ' in chosen_category and len(chosen_category) > 1:
@@ -331,14 +337,9 @@ def ai_categorise_email(email_content):
     else:
         print('AI good category response:', chosen_category)
 
-    # Often an AI will categorise some emails as 'LGBT', 'LGBTQ' or 'LGBTQ+'. This code will standardise these to 'LGBTQ+'
-    # so that the category is consistent when the AI later summarises the emails by category.
-    # It will also standardise 'MARKETING' and 'EVENT' to 'PROMOTIONAL' and 'GOVERNMENT' to 'POLITICS'.
     if 'LGBT' in chosen_category:
         chosen_category = 'LGBTQ+'
-    elif 'MARKETING' in chosen_category.upper():
-        chosen_category = 'PROMOTIONAL'
-    elif 'EVENT' in chosen_category.upper():
+    elif 'MARKETING' in chosen_category.upper() or 'EVENT' in chosen_category.upper():
         chosen_category = 'PROMOTIONAL'
     elif 'GOVERNMENT' in chosen_category.upper():
         chosen_category = 'POLITICS'
@@ -346,12 +347,10 @@ def ai_categorise_email(email_content):
         chosen_category = 'PROPERTY'
     elif 'CALENDAR' in chosen_category.upper():
         chosen_category = 'PERSONAL'
-    elif 'PROMOTIONAL' in chosen_category.upper():
-        chosen_category = 'PROMOTIONAL & SHOPPING'
-    elif 'SHOPPING' in chosen_category.upper():
+    elif 'PROMOTIONAL' in chosen_category.upper() or 'SHOPPING' in chosen_category.upper():
         chosen_category = 'PROMOTIONAL & SHOPPING'
 
-    return chosen_category.replace('.', '').upper()  # remove any stray periods and make uppercase
+    return chosen_category.replace('.', '').upper()
 
 
 def ai_summarise_email_list(email_message_list):
@@ -361,34 +360,13 @@ def ai_summarise_email_list(email_message_list):
         content += f"Subject: {message_data['subject']}\n"
         content += f"Body: {message_data['body']}\n\n"
 
-    response = ollama.chat(
-        model=summarising_ai_model,
-        options={
-            "num_ctx": 130000
-        },
-        messages=[
-            {
-                'role': 'system',
-                'content': ai_model_overall_summary_prompt,
-            },
-            {
-                'role': 'user',
-                'content': content,
-            },
-        ])
+    ai_response = call_ai_model(summarising_ai_model, ai_model_overall_summary_prompt, content)
+    ai_response = ai_response.replace('\n', '.')
 
-    ai_response = response['message']['content'].strip().replace('\n', '.')
-
-    # Despite being told not to (!) the AI sometimes starts the summary with a sentence that is a variant of:
-    # "Here is a summary of the emails in a single paragraph".
-    # We remove this sentence if any of the following keywords are present: 'summary', 'paragraph', 'email'.
-    # We deo this by breaking the string into a list of sentences and removing the first one, then
-    # joining the sentences back together again.
     ai_response_sentences = ai_response.split('.')
     if 'summary' in ai_response_sentences[0] or 'paragraph' in ai_response_sentences[0]:
         ai_response_sentences.pop(0)
 
-    # Check for any empty-sentence strings and remove them
     ai_response_sentences = [sentence for sentence in ai_response_sentences if sentence]
 
     ai_response = '.'.join(ai_response_sentences)
@@ -398,25 +376,7 @@ def ai_summarise_email_list(email_message_list):
 
 def ai_author_top_headlines(summarised_group_content):
     print('Authoring top headlines summary...')
-    content = ''
-
-    response = ollama.chat(
-        model=summarising_ai_model,
-        options={
-            "num_ctx": 130000
-        },
-        messages=[
-            {
-                'role': 'system',
-                'content': ai_model_headline_summary_prompt,
-            },
-            {
-                'role': 'user',
-                'content': summarised_group_content,
-            },
-        ])
-
-    return response['message']['content'].strip()
+    return call_ai_model(summarising_ai_model, ai_model_headline_summary_prompt, summarised_group_content)
 
 
 def update_message_list(message_id, summary):
@@ -428,16 +388,16 @@ def update_message_list(message_id, summary):
             break
 
 
-def author_summary_email(messages_list):
+def author_summary_email(email_list):
     # convert the messages_list data into an email message with the summaries
-    earliest_message = messages_list[0]["date_sent"]
-    latest_message = messages_list[len(messages_list) - 1]["date_sent"]
+    earliest_message = email_list[0]["date_sent"]
+    latest_message = email_list[len(email_list) - 1]["date_sent"]
 
-    email_message = f"Here are the AI-powered summaries of the emails from {earliest_message} to {latest_message}:\n\n"
+    email_body = f"Here are the AI-powered summaries of the emails from {earliest_message} to {latest_message}:\n\n"
 
     # create a list of categories found in messages_list
     categories_list = []
-    for message in messages_list:
+    for message in email_list:
         if message['category'] not in categories_list:
             categories_list.append(message['category'])
 
@@ -455,34 +415,33 @@ def author_summary_email(messages_list):
 
     print('Categories found: ', categories_list)
 
-
     for category in categories_list:
-        filtered_messages_list = [message for message in messages_list if message['category'] == category]
+        filtered_messages_list = [message for message in email_list if message['category'] == category]
         print(f'Asking AI to summarise {len(filtered_messages_list)} emails in category: {category}')
 
-        email_message += f'Category: {category}\n'
-        email_message += ai_summarise_email_list(filtered_messages_list)
-        email_message += '\n\n'
+        email_body += f'Category: {category}\n'
+        email_body += ai_summarise_email_list(filtered_messages_list)
+        email_body += '\n\n'
 
     # Now provide the overall headline summary
-    email_message = 'Overall Headline Summary:\n' + ai_author_top_headlines(email_message) + '\n\n' + email_message
+    email_body = 'Overall Headline Summary:\n' + ai_author_top_headlines(email_body) + '\n\n' + email_body
 
     if INDIVIDUAL_EMAIL_SUMMARIES:
-        for message in messages_list:
-            email_message += '----------------------------------------\n\n'
-            email_message += f"From: {message['sender']}\n"
+        for message in email_list:
+            email_body += '----------------------------------------\n\n'
+            email_body += f"From: {message['sender']}\n"
             try:
-                email_message += f"Date: {message['date_sent']}\n"
+                email_body += f"Date: {message['date_sent']}\n"
             except:
-                email_message += "Date: (unknown)\n"
-            email_message += f"Subject: {message['subject']}\n"
-            email_message += f"Category: {message['category']}\n"
-            email_message += f"Summary: {message['summary']}\n\n"
+                email_body += "Date: (unknown)\n"
+            email_body += f"Subject: {message['subject']}\n"
+            email_body += f"Category: {message['category']}\n"
+            email_body += f"Summary: {message['summary']}\n\n"
 
-    return email_message, earliest_message, latest_message
+    return email_body, earliest_message, latest_message
 
 
-def send_summary_email(email_message, earliest_message_datetime, latest_message_datetime):
+def send_summary_email(email_body, earliest_datetime, latest_datetime):
     if not gmail_account_username or not gmail_account_password:
         print("Email gmail_account_username or gmail_account_password not set in environment variables or .env file")
         exit(1)
@@ -494,8 +453,8 @@ def send_summary_email(email_message, earliest_message_datetime, latest_message_
 
         # Create the email message
         msg = email.message.EmailMessage()
-        msg.set_content(email_message)
-        msg['Subject'] = f'Summary of messages from {earliest_message_datetime} to {latest_message_datetime}'
+        msg.set_content(email_body)
+        msg['Subject'] = f'Summary of messages from {earliest_datetime} to {latest_datetime}'
         msg['From'] = gmail_account_username
         msg['To'] = gmail_account_username
 
