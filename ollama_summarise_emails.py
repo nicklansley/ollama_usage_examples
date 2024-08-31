@@ -16,7 +16,7 @@ load_dotenv()
 
 messages_list = []
 
-ignore_sender_list = ['nick@lansley.com']
+ignore_sender_list = ['ignore@ignoreme.com']
 
 # AI models to use for email summarisation
 # These models are available from the Ollama AI website: https://ollama.com/ and must be downloaded first
