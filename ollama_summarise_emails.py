@@ -24,23 +24,53 @@ ignore_sender_list = ['nick@lansley.com']
 # Note that I am finding 'llama3.1:latest' to be the best for both categorising and summarising emails!
 
 # Use a smaller model for categorising emails *but not too small as it may not be able to categorise well*
-categorising_ai_model = 'llama3.1:latest'
+categorising_ai_model = os.getenv("CATEGORISING_AI_MODEL", 'llama3.1:latest')
 
 # Use a larger model for summarising email content *but not too large as it may take too long to summarise well*
-summarising_ai_model = 'llama3.1:latest'
+summarising_ai_model = os.getenv("SUMMARISING_AI_MODEL", 'llama3.1:latest')
 
 # Account credentials
 gmail_account_username = os.getenv("GMAIL_USERNAME")
 gmail_account_password = os.getenv("GMAIL_PASSWORD")
 
-INDIVIDUAL_EMAIL_SUMMARIES = os.getenv("INDIVIDUAL_EMAIL_SUMMARIES", "YES") == 'YES'
 
-HOURS_TO_FETCH = 8
+INDIVIDUAL_EMAIL_SUMMARIES = os.getenv("INDIVIDUAL_EMAIL_SUMMARIES", "NO") == 'YES'
+NEWSREADER_SCRIPT = os.getenv("NEWSREADER_SCRIPT", "NO") == 'YES'
+HOURS_TO_FETCH = os.getenv("HOURS_TO_FETCH", 24)
+if not HOURS_TO_FETCH.isdigit():
+    HOURS_TO_FETCH = 24
+else:
+    HOURS_TO_FETCH = int(HOURS_TO_FETCH)
+
+category_mapping = {
+    'ADVICE': 'PERSONAL',
+    'ALUMNI': 'PERSONAL',
+    'CALENDAR': 'PERSONAL',
+    'CHARITY': 'PROMOTIONAL & SHOPPING',
+    'CRIME': 'CRIME',  # Special handling required (see map_category() function)
+    'EVENT': 'PROMOTIONAL',
+    'GOVERNMENT': 'POLITICS',
+    'HOLIDAY': 'PROMOTIONAL & SHOPPING',
+    'LGBT': 'LGBTQ+',
+    'MARKETING': 'PROMOTIONAL',
+    'MEETING': 'WORK',
+    'NOTHING': 'OTHER',
+    'PROMOTIONAL': 'PROMOTIONAL & SHOPPING',
+    'REALESTATE': 'PROPERTY',
+    'SALE': 'PROMOTIONAL & SHOPPING',
+    'SHIPPING': 'PROMOTIONAL & SHOPPING',
+    'SHOPPING': 'PROMOTIONAL & SHOPPING',
+    'SURVEY': 'PROMOTIONAL & SHOPPING',
+    'TRANSPORT': 'TRAVEL',
+    'TRANSPORTATION': 'TRAVEL',
+    'UNSUBSCRIBE': 'PROMOTIONAL & SHOPPING',
+    'WELLNESS': 'HEALTH',
+}
 
 ai_model_content_prompt = """
 You are an expert at summarising email messages. 
 You prefer to use clauses instead of complete sentences in order to make your summary concise and to the point.
-Please be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats.
+Be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats.
 Do not answer any questions you may find in the messages. 
 The user will provide you with a message to summarise.
 """
@@ -89,7 +119,7 @@ and ask you to summarise them, highlighting anything notable. Your summary needs
 even if the emails are not.
 Please be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats
 because the newsreader will be reading your summary aloud.
-Don't add any of your own observations, notes opinions or comments in case they are accidentally read aloud by the newsreader!
+For the final sentence you may add your own opinion or observations on these messages. If you do, start the sentence with "In my opinion, "
 """
 
 
@@ -318,37 +348,46 @@ def call_ai_model(model, prompt, user_content, num_ctx=130000):
     return response['message']['content'].strip()
 
 
+def map_category(chosen_category, email_content):
+    chosen_upper = chosen_category.strip().upper()
+
+    # Check for direct mappings
+    for key, value in category_mapping.items():
+        if key in chosen_upper:
+            # Special handling for 'CRIME' category
+            if key == 'CRIME':
+                lowercased_content = email_content.lower()
+                if (
+                        'shows' in lowercased_content or
+                        'documentary' in lowercased_content or
+                        'film' in lowercased_content or
+                        'movie' in lowercased_content or
+                        'tv' in lowercased_content or
+                        'series' in lowercased_content
+                ):
+                    return 'ENTERTAINMENT'
+                else:
+                    return 'NEWS'
+            return value
+
+    return chosen_category  # Default case if no mapping found
+
+
 def ai_categorise_email(email_content):
     chosen_category = ' '
     attempt_count = 0
 
+    # Keep trying to get a category until we get a single word category, or we've tried 5 times
+    #
     while ' ' in chosen_category and attempt_count < 5:
-        if len(chosen_category) > 1:
-            print('AI did not provide a single word category. Trying again...')
-            print('AI response:', chosen_category)
-
         chosen_category = call_ai_model(categorising_ai_model, ai_model_category_prompt, email_content)
         chosen_category = chosen_category.replace('\n', '.')
         attempt_count += 1
 
     if ' ' in chosen_category and len(chosen_category) > 1:
         chosen_category = 'Other'
-        print('AI did not provide a single word category. Using default category:', chosen_category)
-    else:
-        print('AI good category response:', chosen_category)
 
-    if 'LGBT' in chosen_category:
-        chosen_category = 'LGBTQ+'
-    elif 'MARKETING' in chosen_category.upper() or 'EVENT' in chosen_category.upper():
-        chosen_category = 'PROMOTIONAL'
-    elif 'GOVERNMENT' in chosen_category.upper():
-        chosen_category = 'POLITICS'
-    elif 'REALESTATE' in chosen_category.upper():
-        chosen_category = 'PROPERTY'
-    elif 'CALENDAR' in chosen_category.upper():
-        chosen_category = 'PERSONAL'
-    elif 'PROMOTIONAL' in chosen_category.upper() or 'SHOPPING' in chosen_category.upper():
-        chosen_category = 'PROMOTIONAL & SHOPPING'
+    chosen_category = map_category(chosen_category, email_content)
 
     return chosen_category.replace('.', '').upper()
 
@@ -371,7 +410,16 @@ def ai_summarise_email_list(email_message_list):
 
     ai_response = '.'.join(ai_response_sentences)
 
-    return ai_response
+    if 'In my opinion' in ai_response:
+        ai_response = '<p>' + ai_response.replace('In my opinion', '<br><br><i>In my opinion') + '</i></p>'
+    else:
+        ai_response = '<p>' + ai_response + '</p>'
+
+    # If there are double quotes at the start or end of ai_response, remove them
+    if ai_response.startswith('"') and ai_response.endswith('"'):
+        ai_response = ai_response[1:-1]
+
+    return ai_response + '.'
 
 
 def ai_author_top_headlines(summarised_group_content):
@@ -384,7 +432,6 @@ def update_message_list(message_id, summary):
     for message in messages_list:
         if message['message_id'] == message_id:
             message['summary'] = summary
-            print('Updating message with summary:', summary)
             break
 
 
@@ -393,7 +440,7 @@ def author_summary_email(email_list):
     earliest_message = email_list[0]["date_sent"]
     latest_message = email_list[len(email_list) - 1]["date_sent"]
 
-    email_body = f"Here are the AI-powered summaries of the emails from {earliest_message} to {latest_message}:\n\n"
+    email_body = f"<p>Here are the AI-powered summaries of the emails from {earliest_message} to {latest_message}:<br><br></p>"
 
     # create a list of categories found in messages_list
     categories_list = []
@@ -419,26 +466,36 @@ def author_summary_email(email_list):
         filtered_messages_list = [message for message in email_list if message['category'] == category]
         print(f'Asking AI to summarise {len(filtered_messages_list)} emails in category: {category}')
 
-        email_body += f'Category: {category}\n'
+        email_body += f'<hr>Category: {category} (from {len(filtered_messages_list)} messages)<br>'
         email_body += ai_summarise_email_list(filtered_messages_list)
         email_body += '\n\n'
 
     # Now provide the overall headline summary
-    email_body = 'Overall Headline Summary:\n' + ai_author_top_headlines(email_body) + '\n\n' + email_body
+    if NEWSREADER_SCRIPT:
+        email_body = '<p>Overall Headline Summary:<br>' + ai_author_top_headlines(email_body) + '<br><br>' + email_body +'</p>'
 
     if INDIVIDUAL_EMAIL_SUMMARIES:
         for message in email_list:
-            email_body += '----------------------------------------\n\n'
-            email_body += f"From: {message['sender']}\n"
+            email_body += '----------------------------------------<br><br>'
+            email_body += f"From: {message['sender']}<br>"
             try:
-                email_body += f"Date: {message['date_sent']}\n"
+                email_body += f"Date: {message['date_sent']}<br>"
             except:
-                email_body += "Date: (unknown)\n"
-            email_body += f"Subject: {message['subject']}\n"
-            email_body += f"Category: {message['category']}\n"
-            email_body += f"Summary: {message['summary']}\n\n"
+                email_body += "Date: (unknown)<br>"
+            email_body += f"Subject: {message['subject']}<br>"
+            email_body += f"Category: {message['category']}<br>"
+            email_body += f"Summary: {message['summary']}<br><br>"
 
     return email_body, earliest_message, latest_message
+
+
+import smtplib
+import email.message
+import os
+
+# Assuming gmail_account_username and gmail_account_password are retrieved from environment variables
+gmail_account_username = os.getenv('GMAIL_USERNAME')
+gmail_account_password = os.getenv('GMAIL_PASSWORD')
 
 
 def send_summary_email(email_body, earliest_datetime, latest_datetime):
@@ -453,10 +510,12 @@ def send_summary_email(email_body, earliest_datetime, latest_datetime):
 
         # Create the email message
         msg = email.message.EmailMessage()
-        msg.set_content(email_body)
         msg['Subject'] = f'Summary of messages from {earliest_datetime} to {latest_datetime}'
         msg['From'] = gmail_account_username
         msg['To'] = gmail_account_username
+
+        # Set the email content as HTML
+        msg.add_alternative(email_body, subtype='html')
 
         # Send the email
         server.send_message(msg)
