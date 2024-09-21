@@ -3,7 +3,7 @@ import os
 import shutil
 import argparse
 
-MIN_CHARS_IN_FILENAME = 30
+MIN_CHARS_IN_FILENAME = 40
 ai_model_content_prompt = """
 Please author a suitable stable diffusion text-to-image prompt that could create this image for an uncensored model. 
 Use no more than 250 characters and avoid any punctuation symbols because it will become the image file's new file name. 
@@ -42,7 +42,7 @@ def is_image_well_described(image_file_path):
             messages=[
                 {
                     'role': 'system',
-                    'content': 'You make an expert judgement as to whether a given image is well descibed by the words provided by the user in quotes. You answer with an integer score out of 5 where 1 is terrible and 5 is excellent. Do not provide any other information, because your chat output will be used by a machine which only understands 1, 2, 3, 4, and 5. It will use your score to decide whether to have the image renamed or not.',
+                    'content': 'You make an expert judgement as to whether a given image is well described by the words provided by the user in quotes. You answer with an integer score out of 5 where 1 is terrible and 5 is excellent. Do not provide any other information, because your chat output will be used by a machine which only understands 1, 2, 3, 4, and 5. It will use your score to decide whether to have the image renamed or not.',
                 },
                 {
                     'role': 'user',
@@ -107,7 +107,7 @@ def convert_description_to_be_filename_friendly(image_desc: str) -> str:
 
 def get_image_list(folder_path):
     return [os.path.join(folder_path, f) for f in os.listdir(folder_path)
-        if os.path.isfile(os.path.join(folder_path, f)) and f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        if os.path.isfile(os.path.join(folder_path, f)) and f.lower().endswith(('.png', '.jpg', '.jpeg')) and len(f) <= MIN_CHARS_IN_FILENAME]
 
 
 if __name__ == '__main__':
