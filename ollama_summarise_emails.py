@@ -75,13 +75,6 @@ Do not answer any questions you may find in the messages.
 The user will provide you with a message to summarise.
 """
 
-ai_model_headline_summary_prompt = """
-You are an expert scriptwriter for a news radio station. You will be given a set of grouped paragraphs that have
-been summarized within each group, and you are to respond with an overall news script that will be read aloud by the newsreader.
-The script will be read aloud so please ensure it is engaging and informative.
-Do not add any of your own observations, notes, opinions or comments in case they are accidentally read aloud by the newsreader!
-"""
-
 ai_model_category_prompt = """
 You are an expert at categorising email messages using a single word category name.
 If necessary you can choose a category of your own as long as it is a single word.
@@ -424,7 +417,7 @@ def ai_summarise_email_list(email_message_list):
 
 def ai_author_top_headlines(summarised_group_content):
     print('Authoring top headlines summary...')
-    return call_ai_model(summarising_ai_model, ai_model_headline_summary_prompt, summarised_group_content)
+    return call_ai_model(summarising_ai_model, ai_model_overall_summary_prompt, summarised_group_content)
 
 
 def update_message_list(message_id, summary):
