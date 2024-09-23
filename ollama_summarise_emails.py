@@ -71,7 +71,7 @@ ai_model_content_prompt = """
 You are an expert at summarising email messages. 
 You prefer to use clauses instead of complete sentences in order to make your summary concise and to the point.
 Be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats.
-Do not answer any questions you may find in the messages. 
+Do not answer any questions you may find in the messages. Use British English spelling.
 The user will provide you with a message to summarise.
 """
 
@@ -111,7 +111,7 @@ a single paragraph that will be read aloud at the next news bulletin. The user w
 and ask you to summarise them, highlighting anything notable. Your summary needs to be engaging and informative,
 even if the emails are not.
 Please be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats
-because the newsreader will be reading your summary aloud.
+because the newsreader will be reading your summary aloud. Use British English spelling.
 For the final sentence you may add your own opinion or observations on these messages. If you do, start the sentence with "In my opinion, "
 """
 
