@@ -1,12 +1,12 @@
-from datetime import datetime, timedelta, timezone
-from dotenv import load_dotenv
-from email.header import decode_header
 import email
 import email.message
 import imaplib
-import ollama
 import os
-import smtplib
+from datetime import datetime, timedelta, timezone
+from email.header import decode_header
+
+import ollama
+from dotenv import load_dotenv
 
 load_dotenv()
 # Create a separate .env file in the same directory as this script with the following content:
@@ -33,7 +33,6 @@ summarising_ai_model = os.getenv("SUMMARISING_AI_MODEL", 'llama3.1:latest')
 gmail_account_username = os.getenv("GMAIL_USERNAME")
 gmail_account_password = os.getenv("GMAIL_PASSWORD")
 
-
 INDIVIDUAL_EMAIL_SUMMARIES = os.getenv("INDIVIDUAL_EMAIL_SUMMARIES", "NO") == 'YES'
 NEWSREADER_SCRIPT = os.getenv("NEWSREADER_SCRIPT", "NO") == 'YES'
 HOURS_TO_FETCH = os.getenv("HOURS_TO_FETCH", 24)
@@ -55,6 +54,8 @@ category_mapping = {
     'MARKETING': 'PROMOTIONAL',
     'MEETING': 'WORK',
     'NOTHING': 'OTHER',
+    'PITCH': 'BUSINESS',
+    'PRIVACY': 'LEGAL',
     'PROMOTIONAL': 'PROMOTIONAL & SHOPPING',
     'REALESTATE': 'PROPERTY',
     'SALE': 'PROMOTIONAL & SHOPPING',
@@ -72,7 +73,7 @@ You are an expert at summarising email messages.
 You prefer to use clauses instead of complete sentences in order to make your summary concise and to the point.
 Be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats.
 Do not answer any questions you may find in the messages. Use British English spelling.
-The user will provide you with a message to summarise.
+The user will provide you with a message to summarise. This message will have been received within the previous <HOURS_TO_FETCH> hours.
 """
 
 ai_model_category_prompt = """
@@ -105,14 +106,20 @@ If you don't do this, your output will be useless. Here is a list of possible ca
 - Work
 """
 
-ai_model_overall_summary_prompt = """
-You are an expert scriptwriter for a news radio station. You are tasked with summarising a list of email messages into
-a single paragraph that will be read aloud at the next news bulletin. The user will send you a list of email messages 
-and ask you to summarise them, highlighting anything notable. Your summary needs to be engaging and informative,
-even if the emails are not.
+ai_model_category_summary_prompt = """
+You are an expert scriptwriter for a news radio station. You are tasked with summarising a list of email messages that 
+have arrived over the past <HOURS_TO_FETCH> hours into a single paragraph that will be read aloud at the next news bulletin. 
+The user will send you a list of email messages received over the previous <HOURS_TO_FETCH> hours and ask you to 
+summarise them, highlighting anything notable. Your summary needs to be engaging and informative, even if the emails are not.
 Please be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats
-because the newsreader will be reading your summary aloud. Use British English spelling.
+because the newsreader will be reading your summary aloud. Use British English spelling. 
 For the final sentence you may add your own opinion or observations on these messages. If you do, start the sentence with "In my opinion, "
+"""
+
+ai_model_concluding_summary_prompt = """
+You are an expert scriptwriter for a news radio station. You have been given the script for a news bulletin and you are to 
+author a concluding paragraph using your own opinion and observations on these messages that have been received over the previous <HOURS_TO_FETCH> hours. 
+Start the sentence with "In conclusion, "
 """
 
 
@@ -309,7 +316,7 @@ def ai_summarise_email(email_content):
         messages=[
             {
                 'role': 'system',
-                'content': ai_model_content_prompt,
+                'content': ai_model_content_prompt.replace('<HOURS_TO_FETCH>', str(HOURS_TO_FETCH)),
 
             },
             {
@@ -373,7 +380,9 @@ def ai_categorise_email(email_content):
     # Keep trying to get a category until we get a single word category, or we've tried 5 times
     #
     while ' ' in chosen_category and attempt_count < 5:
-        chosen_category = call_ai_model(categorising_ai_model, ai_model_category_prompt, email_content)
+        chosen_category = call_ai_model(categorising_ai_model,
+                                        ai_model_category_prompt.replace('<HOURS_TO_FETCH>', str(HOURS_TO_FETCH)),
+                                        email_content)
         chosen_category = chosen_category.replace('\n', '.')
         attempt_count += 1
 
@@ -385,14 +394,16 @@ def ai_categorise_email(email_content):
     return chosen_category.replace('.', '').upper()
 
 
-def ai_summarise_email_list(email_message_list):
+def ai_author_category_headlines(email_message_list):
     content = ''
     for message_data in email_message_list:
         content += f"From: {message_data['sender']}\n"
         content += f"Subject: {message_data['subject']}\n"
         content += f"Body: {message_data['body']}\n\n"
 
-    ai_response = call_ai_model(summarising_ai_model, ai_model_overall_summary_prompt, content)
+    ai_response = call_ai_model(summarising_ai_model,
+                                ai_model_category_summary_prompt.replace('<HOURS_TO_FETCH>', str(HOURS_TO_FETCH)),
+                                content)
     ai_response = ai_response.replace('\n', '.')
 
     ai_response_sentences = ai_response.split('.')
@@ -415,9 +426,18 @@ def ai_summarise_email_list(email_message_list):
     return ai_response + '.'
 
 
-def ai_author_top_headlines(summarised_group_content):
+def ai_author_concluding_paragraph(email_body_text):
+    print('Authoring concluding paragraph...')
+    return call_ai_model(summarising_ai_model,
+                         ai_model_concluding_summary_prompt.replace('<HOURS_TO_FETCH>', str(HOURS_TO_FETCH)),
+                         email_body_text)
+
+
+def ai_author_overall_headlines(summarised_group_content):
     print('Authoring top headlines summary...')
-    return call_ai_model(summarising_ai_model, ai_model_overall_summary_prompt, summarised_group_content)
+    return call_ai_model(summarising_ai_model,
+                         ai_model_category_summary_prompt.replace('<HOURS_TO_FETCH>', str(HOURS_TO_FETCH)),
+                         summarised_group_content)
 
 
 def update_message_list(message_id, summary):
@@ -460,12 +480,13 @@ def author_summary_email(email_list):
         print(f'Asking AI to summarise {len(filtered_messages_list)} emails in category: {category}')
 
         email_body += f'<hr>Category: {category} (from {len(filtered_messages_list)} messages)<br>'
-        email_body += ai_summarise_email_list(filtered_messages_list)
+        email_body += ai_author_category_headlines(filtered_messages_list)
         email_body += '\n\n'
 
     # Now provide the overall headline summary
     if NEWSREADER_SCRIPT:
-        email_body = '<p>Overall Headline Summary:<br>' + ai_author_top_headlines(email_body) + '<br><br>' + email_body +'</p>'
+        email_body = '<p>Overall Headline Summary:<br>' + ai_author_overall_headlines(
+            email_body) + '<br><br>' + email_body + '</p>'
 
     if INDIVIDUAL_EMAIL_SUMMARIES:
         for message in email_list:
@@ -478,6 +499,8 @@ def author_summary_email(email_list):
             email_body += f"Subject: {message['subject']}<br>"
             email_body += f"Category: {message['category']}<br>"
             email_body += f"Summary: {message['summary']}<br><br>"
+
+    email_body += '<hr>Concluding Paragraph:<br>' + ai_author_concluding_paragraph(email_body)
 
     return email_body, earliest_message, latest_message
 
@@ -518,8 +541,8 @@ if __name__ == '__main__':
     try:
         start_time = datetime.now(timezone.utc)
         print(f'Starting email summarisation process at {start_time}')
-        messages_list = get_gmail_messages()
 
+        messages_list = get_gmail_messages()
         process_counter = 1
 
         for message in messages_list:
