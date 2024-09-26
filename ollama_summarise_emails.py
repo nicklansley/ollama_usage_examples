@@ -324,7 +324,7 @@ def ai_summarise_email(email_content):
     response = ollama.chat(
         model=summarising_ai_model,
         options={
-            "num_ctx": 130000
+            "num_ctx": 10000
         },
         messages=[
             {
@@ -341,7 +341,7 @@ def ai_summarise_email(email_content):
     return response['message']['content'].strip().replace('\n', '.')
 
 
-def call_ai_model(model, prompt, user_content, num_ctx=130000):
+def call_ai_model(model, prompt, user_content, num_ctx=10000):
     response = ollama.chat(
         model=model,
         options={
