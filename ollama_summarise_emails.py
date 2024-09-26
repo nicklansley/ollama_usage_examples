@@ -25,9 +25,11 @@ ignore_sender_list = ['nick@lansley.com']
 
 # Use a smaller model for categorising emails *but not too small as it may not be able to categorise well*
 categorising_ai_model = os.getenv("CATEGORISING_AI_MODEL", 'llama3.1:latest')
+print('Using AI model for categorising emails:', categorising_ai_model)
 
 # Use a larger model for summarising email content *but not too large as it may take too long to summarise well*
 summarising_ai_model = os.getenv("SUMMARISING_AI_MODEL", 'llama3.1:latest')
+print('Using AI model for summarising email content:', summarising_ai_model)
 
 # Account credentials
 gmail_account_username = os.getenv("GMAIL_USERNAME")
@@ -42,18 +44,26 @@ else:
     HOURS_TO_FETCH = int(HOURS_TO_FETCH)
 
 category_mapping = {
-    'ADVICE': 'PERSONAL',
-    'ALUMNI': 'PERSONAL',
-    'CALENDAR': 'PERSONAL',
+    'ADVERTISING': 'NEWS',
+    'ADVICE': 'PERSONAL & SOCIAL',
+    'ALUMNI': 'PERSONAL & SOCIAL',
+    'BLANK': 'OTHER',
+    'CALENDAR': 'PERSONAL & SOCIAL',
     'CHARITY': 'PROMOTIONAL & SHOPPING',
     'CRIME': 'CRIME',  # Special handling required (see map_category() function)
-    'EVENT': 'PROMOTIONAL',
+    'CONFIRMATION': 'PERSONAL & SOCIAL',
+    'CONFLICT': 'NEWS',
+    'DEVELOPMENT': 'WORK',
+    'EVENT': 'PROMOTIONAL & SHOPPING',
     'GOVERNMENT': 'POLITICS',
     'HOLIDAY': 'PROMOTIONAL & SHOPPING',
+    'JOBS': 'WORK',
     'LGBT': 'LGBTQ+',
-    'MARKETING': 'PROMOTIONAL',
+    'LINK': 'PROMOTIONAL & SHOPPING',
+    'MARKETING': 'PROMOTIONAL & SHOPPING',
     'MEETING': 'WORK',
     'NOTHING': 'OTHER',
+    'PERSONAL': 'PERSONAL & SOCIAL',
     'PITCH': 'BUSINESS',
     'PRIVACY': 'LEGAL',
     'PROMOTIONAL': 'PROMOTIONAL & SHOPPING',
@@ -61,9 +71,12 @@ category_mapping = {
     'SALE': 'PROMOTIONAL & SHOPPING',
     'SHIPPING': 'PROMOTIONAL & SHOPPING',
     'SHOPPING': 'PROMOTIONAL & SHOPPING',
+    'SOCIAL': 'PERSONAL & SOCIAL',
     'SURVEY': 'PROMOTIONAL & SHOPPING',
+    'TECHNICAL': 'TECHNOLOGY',
     'TRANSPORT': 'TRAVEL',
     'TRANSPORTATION': 'TRAVEL',
+    'UNKNOWN': 'OTHER',
     'UNSUBSCRIBE': 'PROMOTIONAL & SHOPPING',
     'WELLNESS': 'HEALTH',
 }
@@ -404,9 +417,9 @@ def ai_author_category_headlines(email_message_list):
     ai_response = call_ai_model(summarising_ai_model,
                                 ai_model_category_summary_prompt.replace('<HOURS_TO_FETCH>', str(HOURS_TO_FETCH)),
                                 content)
-    ai_response = ai_response.replace('\n', '.')
+    ai_response = ai_response.replace('\n', '. ')
 
-    ai_response_sentences = ai_response.split('.')
+    ai_response_sentences = ai_response.split('. ')
     if 'summary' in ai_response_sentences[0] or 'paragraph' in ai_response_sentences[0]:
         ai_response_sentences.pop(0)
 
@@ -423,7 +436,7 @@ def ai_author_category_headlines(email_message_list):
     if ai_response.startswith('"') and ai_response.endswith('"'):
         ai_response = ai_response[1:-1]
 
-    return ai_response + '.'
+    return ai_response + '. '
 
 
 def ai_author_concluding_paragraph(email_body_text):
@@ -465,9 +478,9 @@ def author_summary_email(email_list):
     categories_list.sort()
 
     # Always have the PERSONAL category first and NEWS category second:
-    if 'PERSONAL' in categories_list:
-        categories_list.remove('PERSONAL')
-        categories_list.insert(0, 'PERSONAL')
+    if 'PERSONAL & SOCIAL' in categories_list:
+        categories_list.remove('PERSONAL & SOCIAL')
+        categories_list.insert(0, 'PERSONAL & SOCIAL')
 
     if 'NEWS' in categories_list:
         categories_list.remove('NEWS')
@@ -480,8 +493,13 @@ def author_summary_email(email_list):
         print(f'Asking AI to summarise {len(filtered_messages_list)} emails in category: {category}')
 
         email_body += f'<hr>Category: {category} (from {len(filtered_messages_list)} messages)<br>'
-        email_body += ai_author_category_headlines(filtered_messages_list)
-        email_body += '\n\n'
+
+        # Process the filtered messages in chunks of 10
+        for i in range(0, len(filtered_messages_list), 10):
+            filtered_messages_group = filtered_messages_list[i:i + 10]
+            email_body += f' >>> {category}-{i+1}-{i+10}<br>'
+            email_body += ai_author_category_headlines(filtered_messages_group)
+            email_body += '\n\n'
 
     # Now provide the overall headline summary
     if NEWSREADER_SCRIPT:
