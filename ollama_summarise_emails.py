@@ -1,6 +1,7 @@
 import email
 import email.message
 import imaplib
+import json
 import os
 from datetime import datetime, timedelta, timezone
 from email.header import decode_header
@@ -16,6 +17,7 @@ class EmailSummarizer:
         self.gmail_account_password = os.getenv("GMAIL_PASSWORD")
         self.INDIVIDUAL_EMAIL_SUMMARIES = os.getenv("INDIVIDUAL_EMAIL_SUMMARIES", "NO") == "YES"
         self.NEWSREADER_SCRIPT = os.getenv("NEWSREADER_SCRIPT", "NO") == "YES"
+        self.NUM_CTX = int(os.getenv("NUM_CTX", "8000"))
 
         self.HOURS_TO_FETCH = os.getenv("HOURS_TO_FETCH", "24")
         self.HOURS_TO_FETCH = int(self.HOURS_TO_FETCH) if self.HOURS_TO_FETCH.isdigit() else 24
@@ -38,60 +40,48 @@ class EmailSummarizer:
         """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
 
         self.ai_model_category_prompt = """
-        You are an expert at categorising email messages using a single word category name.
-        If necessary you can choose a category of your own as long as it is a single word.
-        Please provide the category of the email message you think most closely matches the content.
-        You must respond with only a single word which is your chosen category. Do not respond with multiple words or sentences.
-        Here is a list of possible categories:
+        Your task is to categorize an email with a single word. 
+        Choose from the provided list or select your own single-word category if needed. 
+        Respond with only the category word. Here is a list of possible categories:
         - Business, Charity, Education, Entertainment, Environment, Finance, Food, Government, Health, LGBTQ+, Legal,
-          News, Personal, Promotional, Religion, Science, Shopping, Social, Sport, Technology, Travel, Work
+          News, Personal, Promotional, Religion, Science, Shopping, Social, Sport, Technology, Travel, Work.
         """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
 
         self.ai_model_top_headlines_prompt = """
-        You are an expert scriptwriter for a news radio station. You are tasked with creating headlines based on the emails that 
-        have arrived over the past <HOURS_TO_FETCH> hours into a single paragraph that will be read aloud at the next news bulletin. 
-        The user will send you a list of email messages received over the previous <HOURS_TO_FETCH> hours and ask you to 
-        summarise them as headlines, highlighting anything notable. Your summary needs to be engaging and informative, holding the listener's attention as the news bulletin starts.
-        Please be brief and to the point in a single paragraph. Use British English spelling.
-        For the final sentence you may add your own opinion or observations on these messages. If you do, start the sentence with "In my opinion, "
+        You are an expert scriptwriter for a news radio station. 
+        Create engaging and informative news headlines from the emails received in the past <HOURS_TO_FETCH> hours. 
+        Your summary should be a single, concise paragraph suitable for a news bulletin opening. 
+        Highlight any significant news. 
+        Conclude with your own observations on the messages, starting with "In my opinion..."."
         """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
 
 
         self.ai_model_category_headlines_prompt = """
-        You are an expert scriptwriter for a news radio station. You are tasked with summarising a list of email messages that 
-        have arrived over the past <HOURS_TO_FETCH> hours into a single paragraph that will be read aloud at the next news bulletin. 
-        The user will send you a list of email messages received over the previous <HOURS_TO_FETCH> hours and ask you to 
-        summarise them, highlighting anything notable. Your summary needs to be engaging and informative, even if the emails are not.
-        Please be brief and to the point in a single paragraph. Use British English spelling.
-        For the final sentence you may add your own opinion or observations on these messages. If you do, start the sentence with "In my opinion, "
+        You are an expert scriptwriter for a news radio station. 
+        Condense the emails received in the past <HOURS_TO_FETCH> hours into an engaging and informative 
+        single-paragraph news bulletin summary, highlighting noteworthy points even if the emails seem mundane. 
+        Be concise, use British English spelling, 
+        and conclude with your personal observations starting with "In my opinion...".
         """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
 
         self.ai_model_concluding_summary_prompt = """
-        You are an expert scriptwriter for a news radio station. You have been given the script for a news bulletin and you are to 
-        author a concluding paragraph using your own opinion and observations on these messages that have been received over the previous <HOURS_TO_FETCH> hours. 
-        Start the sentence with "In conclusion, "
+        You are an expert scriptwriter for a news radio station. 
+        Write a concluding paragraph for a news bulletin, expressing your own opinion and observations on 
+        the messages received in the past <HOURS_TO_FETCH> hours. 
+        Begin the paragraph with "In conclusion, ".
         """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
 
 
     @staticmethod
     def format_body(body_text: str) -> str:
-        replacements = [
-            ('\n', ' '), ('\r', ' '), ('\t', ' '), ('\u200c', ' '), ('\u2019', ' '), ('\ud83d', ' '), ('\udc9a', ' '),
-            ('\u00a9', ' '), ('\u2014', ' '), ('\u2013', ''), ('\u2012', ''), ('\u201c', ' '), ('\u201d', ''), ('\u2018', ' ')
-        ]
+        # replace all '\uXXXX' characters with a space
+        body_text = body_text.encode('ascii', 'ignore').decode('ascii')
 
-        for search, replacement in replacements:
-            body_text = body_text.replace(search, replacement)
+        # remove any extra spaces
         while '  ' in body_text:
             body_text = body_text.replace('  ', ' ')
 
-        word_list = body_text.split()
-        formatted_word_list = []
-        for word in word_list:
-            if word.startswith('&') and word.endswith(';'):
-                continue
-            formatted_word_list.append(word)
-        return ' '.join([word for word in formatted_word_list if len(word) <= 15])
+        return body_text
 
     def get_gmail_messages(self):
         if not self.gmail_account_username or not self.gmail_account_password:
@@ -134,10 +124,23 @@ class EmailSummarizer:
     def fetch_and_filter_messages(self, mail, message_id_list):
         email_list = []
         counter = 0
+        date_hours_ago = datetime.now(timezone.utc) - timedelta(hours=self.HOURS_TO_FETCH)
         for current_email_id in message_id_list:
             msg = self.fetch_email_by_id(mail, current_email_id)
             msg_data = self.extract_email_data(msg)
             print('.', end='', flush=True)
+
+            # check that msg_data['date_sent'] is not None and is also within the last HOURS_TO_FETCH hours
+            if not msg_data['date_sent']:
+                continue
+            else :
+                try:
+                    email_date = datetime.strptime(msg_data['date_sent'], '%a, %d %b %Y %H:%M:%S %z')
+                    if email_date < date_hours_ago:
+                        continue
+                except:
+                    continue
+
 
             if msg_data['sender'] in self.ignore_sender_list:
                 continue
@@ -220,16 +223,16 @@ class EmailSummarizer:
     def ai_summarise_email(self, email_content: str) -> str:
         response = ollama.chat(
             model=self.summarising_ai_model,
-            options={"num_ctx": 8000},
+            options={"num_ctx": self.NUM_CTX},
             messages=[
                 {'role': 'system', 'content': self.ai_model_content_prompt},
                 {'role': 'user', 'content': email_content},
             ])
         return response['message']['content'].strip().replace('\n', '.')
 
-    def call_ai_model(self, model, prompt, user_content, num_ctx=8000):
+    def call_ai_model(self, model, prompt, user_content):
         response = ollama.chat(
-            model=model, options={"num_ctx": num_ctx},
+            model=model, options={"num_ctx": self.NUM_CTX},
             messages=[
                 {'role': 'system', 'content': prompt},
                 {'role': 'user', 'content': user_content},
@@ -256,7 +259,7 @@ class EmailSummarizer:
 
     def ai_author_category_headlines(self, email_message_list: list) -> str:
         content = ''.join(
-            f"From: {message_data['sender']}\nSubject: {message_data['subject']}\nBody: {message_data['body']}\n\n"
+            f"From: {message_data['sender']}\nSubject: {message_data['subject']}\nMessage: {message_data['summary']}\n\n"
             for message_data in email_message_list)
 
         ai_response = self.call_ai_model(
@@ -292,6 +295,7 @@ class EmailSummarizer:
         for message in self.messages_list:
             if message['message_id'] == message_id:
                 message['summary'] = summary
+                self.save_messages_list_to_file()
                 break
 
     def author_summary_email(self, email_list: list) -> tuple:
@@ -301,9 +305,9 @@ class EmailSummarizer:
         email_body = f"<p>Here are the AI-powered summaries of the emails from {earliest_message} to {latest_message}:<br><br></p>"
         categories_list = sorted(set(message["category"] for message in email_list))
 
-        if 'PERSONAL & SOCIAL' in categories_list:
-            categories_list.remove('PERSONAL & SOCIAL')
-            categories_list.insert(0, 'PERSONAL & SOCIAL')
+        if 'PERSONAL' in categories_list:
+            categories_list.remove('PERSONAL')
+            categories_list.insert(0, 'PERSONAL')
 
         if 'NEWS' in categories_list:
             categories_list.remove('NEWS')
@@ -319,6 +323,8 @@ class EmailSummarizer:
                 email_body += f' >>> {category}-{i+1}-{i+10}<br>'
                 email_body += self.ai_author_category_headlines(filtered_messages_list[i:i + 10])
                 email_body += '\n\n'
+
+                self.save_messages_list_to_file()
 
         if self.NEWSREADER_SCRIPT:
             email_body = '<p>Overall Headline Summary:<br>' + self.ai_author_overall_headlines(email_body) + '<br><br>' + email_body + '</p>'
@@ -349,6 +355,10 @@ class EmailSummarizer:
             msg.add_alternative(email_body, subtype='html')
             server.send_message(msg)
 
+    def save_messages_list_to_file(self):
+        with open('email_messages.json', 'w') as f:
+            json.dump(self.messages_list, f, indent=4)
+
     def run(self):
         try:
             start_time = datetime.now(timezone.utc)
@@ -358,12 +368,14 @@ class EmailSummarizer:
             process_counter = 1
 
             for message in self.messages_list:
-                print('Processing message:', process_counter, 'of', len(self.messages_list))
                 email_text = message['body']
-                message['category'] = self.ai_categorise_email(email_text)
+                print('Processing message:', process_counter, 'of', len(self.messages_list),
+                      ' - ', round(len(email_text) / 1000, 1), 'Kb from', message['sender'] ,
+                      '\n\t\t\twith subject:', message['subject'])
+                message['summary'] = self.ai_summarise_email(email_text)
+                message['category'] = self.ai_categorise_email(message['summary'])
 
-                if self.INDIVIDUAL_EMAIL_SUMMARIES:
-                    message['summary'] = self.ai_summarise_email(email_text)
+                print('\t\t\tCategory:', message['category'])
 
                 self.update_message_list(message['message_id'], message['summary'])
                 process_counter += 1
@@ -374,6 +386,8 @@ class EmailSummarizer:
             print('Now sending summary email to', self.gmail_account_username)
             self.send_summary_email(email_message, earliest_message_datetime, latest_message_datetime)
 
+            self.save_messages_list_to_file()
+
             end_time = datetime.now(timezone.utc)
             print("Email AI Summarisation Ended at:", end_time)
             print('Duration:', end_time - start_time)
@@ -381,6 +395,10 @@ class EmailSummarizer:
         except Exception as e:
             print(f"An error occurred during the summarisation process: {e}")
 
+
 if __name__ == "__main__":
-    summarizer = EmailSummarizer()
-    summarizer.run()
+    try:
+        summarizer = EmailSummarizer()
+        summarizer.run()
+    except KeyboardInterrupt:
+        print("Email summarisation process interrupted by user")
