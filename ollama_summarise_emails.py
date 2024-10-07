@@ -6,13 +6,28 @@ import os
 from datetime import datetime, timedelta, timezone
 from email.header import decode_header
 import smtplib
+from typing import TextIO
+
 from dotenv import load_dotenv
 import ollama
 
 load_dotenv()
 
-class EmailSummarizer:
+
+def fetch_email_by_id(mail, email_id):
+    status, msg_data = mail.fetch(email_id, "(RFC822)")
+    raw_email = msg_data[0][1]
+    return email.message_from_bytes(raw_email)
+
+
+class EmailSummariser:
     def __init__(self):
+        self.ai_model_concluding_summary_prompt = ""
+        self.ai_model_category_headlines_prompt = ""
+        self.ai_model_top_headlines_prompt = ""
+        self.ai_model_category_prompt = ""
+        self.ai_model_content_prompt = ""
+        self.ai_model_convert_html_to_plain_text_prompt = ""
         self.gmail_account_username = os.getenv("GMAIL_USERNAME")
         self.gmail_account_password = os.getenv("GMAIL_PASSWORD")
         self.INDIVIDUAL_EMAIL_SUMMARIES = os.getenv("INDIVIDUAL_EMAIL_SUMMARIES", "NO") == "YES"
@@ -50,17 +65,17 @@ class EmailSummarizer:
         self.ai_model_top_headlines_prompt = """
         You are an expert scriptwriter for a news radio station. 
         Create engaging and informative news headlines from the emails received in the past <HOURS_TO_FETCH> hours. 
-        Your summary should be a single, concise paragraph suitable for a news bulletin opening. 
+        Your summary should be a paragraph suitable for a news bulletin opening. Be fluid and expressive, and don't include 
+        any bullet points or lists. Make it easy for the newsreader to present the information.
         Highlight any significant news. 
         Conclude with your own observations on the messages, starting with "In my opinion..."."
         """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
-
 
         self.ai_model_category_headlines_prompt = """
         You are an expert scriptwriter for a news radio station. 
         Condense the emails received in the past <HOURS_TO_FETCH> hours into an engaging and informative 
         single-paragraph news bulletin summary, highlighting noteworthy points even if the emails seem mundane. 
-        Be concise, use British English spelling, 
+        Be concise, use British English spelling. Make it easy for the newsreader to present the information,  
         and conclude with your personal observations starting with "In my opinion...".
         """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
 
@@ -71,6 +86,10 @@ class EmailSummarizer:
         Begin the paragraph with "In conclusion, ".
         """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
 
+        self.ai_model_convert_html_to_plain_text_prompt = """
+        You are an expert at converting HTML content to plain text. There is no need to retain any formatting or links,
+        just return the plain text content. The user will provide you with an HTML message to convert.
+        """
 
     @staticmethod
     def format_body(body_text: str) -> str:
@@ -85,7 +104,8 @@ class EmailSummarizer:
 
     def get_gmail_messages(self):
         if not self.gmail_account_username or not self.gmail_account_password:
-            print("Email gmail_account_username or gmail_account_password not set in environment variables or .env file")
+            print(
+                "Email gmail_account_username or gmail_account_password not set in environment variables or .env file")
             exit(1)
 
         mail = self.connect_to_server()
@@ -122,43 +142,44 @@ class EmailSummarizer:
             return []
 
     def fetch_and_filter_messages(self, mail, message_id_list):
-        email_list = []
-        counter = 0
-        date_hours_ago = datetime.now(timezone.utc) - timedelta(hours=self.HOURS_TO_FETCH)
-        for current_email_id in message_id_list:
-            msg = self.fetch_email_by_id(mail, current_email_id)
-            msg_data = self.extract_email_data(msg)
-            print('.', end='', flush=True)
+        try:
+            email_list = []
+            counter = 0
+            date_hours_ago = datetime.now(timezone.utc) - timedelta(hours=self.HOURS_TO_FETCH)
+            for current_email_id in message_id_list:
+                msg = fetch_email_by_id(mail, current_email_id)
+                msg_data = self.extract_email_data(msg)
+                print('.', end='', flush=True)
 
-            # check that msg_data['date_sent'] is not None and is also within the last HOURS_TO_FETCH hours
-            if not msg_data['date_sent']:
-                continue
-            else :
-                try:
-                    email_date = datetime.strptime(msg_data['date_sent'], '%a, %d %b %Y %H:%M:%S %z')
-                    if email_date < date_hours_ago:
+                # check that msg_data['date_sent'] is not None and is also within the last HOURS_TO_FETCH hours
+                if not msg_data['date_sent']:
+                    continue
+                else:
+                    try:
+                        email_date = datetime.strptime(msg_data['date_sent'], '%a, %d %b %Y %H:%M:%S %z')
+                        if email_date < date_hours_ago:
+                            continue
+                    except:
                         continue
-                except:
+
+                if msg_data['sender'] in self.ignore_sender_list:
                     continue
 
-
-            if msg_data['sender'] in self.ignore_sender_list:
-                continue
-
-            if msg_data['body'] and len(msg_data['body']) > 0:
                 email_list.append(msg_data)
+
                 counter += 1
                 if counter % 50 == 0:
                     print(f' - {counter}', end='', flush=True)
                     print()
 
-        print(f'{len(email_list)} messages found with readable text in the body of the message')
-        return email_list
+            print(f'{len(email_list)} messages found with readable text in the body of the message')
 
-    def fetch_email_by_id(self, mail, email_id):
-        status, msg_data = mail.fetch(email_id, "(RFC822)")
-        raw_email = msg_data[0][1]
-        return email.message_from_bytes(raw_email)
+        except Exception as e:
+            print('Error fetching and filtering messages:', e)
+            print('Traceback:', e.__traceback__.tb_lineno)
+            return []
+
+        return email_list
 
     def extract_email_data(self, msg) -> dict:
         try:
@@ -182,12 +203,20 @@ class EmailSummarizer:
             date_sent = '(unknown date)'
 
         try:
-            body = self.extract_body(msg)
+            plain_text, html = self.extract_body(msg)
         except:
-            body = ''
+            plain_text = ''
+            html = ''
 
         return {
-            'message_id': message_id, 'date_sent': date_sent, 'sender': sender, 'subject': subject, 'body': self.format_body(body), 'summary': ''
+            'message_id': message_id,
+            'date_sent': date_sent,
+            'sender': sender,
+            'subject': subject,
+            'plain_text': self.format_body(plain_text),
+            'html': html,
+            'summary': '',
+            'category': 'OTHER'
         }
 
     @staticmethod
@@ -199,7 +228,8 @@ class EmailSummarizer:
 
     @staticmethod
     def extract_body(msg):
-        body = ''
+        plain_text = ''
+        html = ''
 
         def decode_payload(encoded_payload):
             if encoded_payload:
@@ -213,12 +243,15 @@ class EmailSummarizer:
                 content_type = part.get_content_type()
                 if "text/plain" in content_type:
                     payload = part.get_payload(decode=True)
-                    body += decode_payload(payload)
+                    plain_text += decode_payload(payload)
+                elif "text/html" in content_type:
+                    payload = part.get_payload(decode=True)
+                    html += decode_payload(payload)
         else:
             payload = msg.get_payload(decode=True)
-            body += decode_payload(payload)
+            plain_text += decode_payload(payload)
 
-        return body
+        return plain_text, html
 
     def ai_summarise_email(self, email_content: str) -> str:
         response = ollama.chat(
@@ -240,7 +273,6 @@ class EmailSummarizer:
 
         return response['message']['content'].strip()
 
-
     def ai_categorise_email(self, email_content: str) -> str:
         chosen_category = ' '
         attempt_count = 0
@@ -256,6 +288,9 @@ class EmailSummarizer:
 
         return chosen_category.upper()
 
+    def ai_convert_html_to_plain_text(self, email_content: str) -> str:
+        plain_text  = self.call_ai_model(self.summarising_ai_model, self.ai_model_convert_html_to_plain_text_prompt, email_content)
+        return plain_text.replace('\n', '. ').replace('..', '.').strip()
 
     def ai_author_category_headlines(self, email_message_list: list) -> str:
         content = ''.join(
@@ -266,7 +301,8 @@ class EmailSummarizer:
             self.summarising_ai_model, self.ai_model_category_headlines_prompt, content
         ).replace('\n', '. ')
 
-        ai_response_sentences = [sentence for sentence in ai_response.split('. ') if 'summary' not in sentence and 'paragraph' not in sentence and sentence]
+        ai_response_sentences = [sentence for sentence in ai_response.split('. ') if
+                                 'summary' not in sentence and 'paragraph' not in sentence and sentence]
         ai_response = '. '.join(ai_response_sentences)
 
         if 'In my opinion' in ai_response:
@@ -287,9 +323,12 @@ class EmailSummarizer:
 
     def ai_author_overall_headlines(self, summarised_group_content: str) -> str:
         print('Authoring top headlines summary...')
-        return self.call_ai_model(
+        headlines =  self.call_ai_model(
             self.summarising_ai_model, self.ai_model_top_headlines_prompt, summarised_group_content
         )
+        # Put in two line breaks every fourth sentence to make the text more readable
+        headlines = '.<br><br>'.join([sentence for i, sentence in enumerate(headlines.split('. ')) if i % 4 != 0])
+        return headlines
 
     def update_message_list(self, message_id: str, summary: str):
         for message in self.messages_list:
@@ -317,17 +356,16 @@ class EmailSummarizer:
         for category in categories_list:
             category_counter += 1
             filtered_messages_list = [message for message in email_list if message["category"] == category]
-            print(f'Processing category: {category} ({category_counter} of {len(categories_list)}) - {len(filtered_messages_list)} messages...')
+            print(
+                f'Processing category: {category} ({category_counter} of {len(categories_list)}) - {len(filtered_messages_list)} messages...')
             email_body += f'<hr>Category: {category} (from {len(filtered_messages_list)} messages)<br>'
-            for i in range(0, len(filtered_messages_list), 10):
-                email_body += f' >>> {category}-{i+1}-{i+10}<br>'
-                email_body += self.ai_author_category_headlines(filtered_messages_list[i:i + 10])
-                email_body += '\n\n'
-
-                self.save_messages_list_to_file()
+            email_body += f' >>> {category}:<br>'
+            email_body += self.ai_author_category_headlines(filtered_messages_list)
+            email_body += '\n\n'
 
         if self.NEWSREADER_SCRIPT:
-            email_body = '<p>Overall Headline Summary:<br>' + self.ai_author_overall_headlines(email_body) + '<br><br>' + email_body + '</p>'
+            email_body = '<p>Overall Headline Summary:<br>' + self.ai_author_overall_headlines(
+                email_body) + '<br><br>' + email_body + '</p>'
 
         if self.INDIVIDUAL_EMAIL_SUMMARIES:
             for message in email_list:
@@ -343,7 +381,8 @@ class EmailSummarizer:
 
     def send_summary_email(self, email_body: str, earliest_datetime: str, latest_datetime: str):
         if not self.gmail_account_username or not self.gmail_account_password:
-            print("Email gmail_account_username or gmail_account_password not set in environment variables or .env file")
+            print(
+                "Email gmail_account_username or gmail_account_password not set in environment variables or .env file")
             exit(1)
 
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
@@ -356,7 +395,7 @@ class EmailSummarizer:
             server.send_message(msg)
 
     def save_messages_list_to_file(self):
-        with open('email_messages.json', 'w') as f:
+        with open('email_messages.json', 'w', encoding="utf8") as f:
             json.dump(self.messages_list, f, indent=4)
 
     def run(self):
@@ -364,24 +403,46 @@ class EmailSummarizer:
             start_time = datetime.now(timezone.utc)
             print(f'Starting email summarisation process at {start_time}')
 
-            self.messages_list = self.get_gmail_messages()
-            process_counter = 1
+            # check if there is a saved list of messages in file 'email_messages.json'.
+            # If it exists, load it:
+            if os.path.exists('email_messages.json'):
+                with open('email_messages.json', 'r', encoding="utf8") as f:
+                    if input('Do you want to use the saved email messages list? (y/n) > ') == 'y':
+                        self.messages_list = json.load(f)
+                    else:
+                        self.messages_list = self.get_gmail_messages()
+            else:
+                self.messages_list = self.get_gmail_messages()
 
             for message in self.messages_list:
-                email_text = message['body']
-                print('Processing message:', process_counter, 'of', len(self.messages_list),
-                      ' - ', round(len(email_text) / 1000, 1), 'Kb from', message['sender'] ,
-                      '\n\t\t\twith subject:', message['subject'])
-                message['summary'] = self.ai_summarise_email(email_text)
-                message['category'] = self.ai_categorise_email(message['summary'])
+                process_counter = 1
+                # Other is the initial category for all messages
+                if message['category'] == 'OTHER':
+                    if len(message['plain_text']) > 0:
+                        email_text = message['plain_text']
+                    elif len(message['html']) > 0:
+                        print('Converting HTML to plain text using AI')
+                        email_text = self.ai_convert_html_to_plain_text(message['html'])
+                    else:
+                        email_text = ''
 
-                print('\t\t\tCategory:', message['category'])
+                    if len(email_text) < 100:
+                        print('Email content too short to summarise')
+                    else:
+                        print('Processing message:', process_counter, 'of', len(self.messages_list),
+                              ' - ', round(len(email_text) / 1000, 1), 'Kb from', message['sender'],
+                              '\n\t\t\twith subject:', message['subject'])
+                        message['summary'] = self.ai_summarise_email(email_text)
+                        message['category'] = self.ai_categorise_email(message['summary'])
 
-                self.update_message_list(message['message_id'], message['summary'])
-                process_counter += 1
+                        print('\t\t\tCategory:', message['category'])
+
+                        self.update_message_list(message['message_id'], message['summary'])
+                        process_counter += 1
 
             print('All emails summarised successfully - now authoring summary email')
-            email_message, earliest_message_datetime, latest_message_datetime = self.author_summary_email(self.messages_list)
+            email_message, earliest_message_datetime, latest_message_datetime = self.author_summary_email(
+                self.messages_list)
 
             print('Now sending summary email to', self.gmail_account_username)
             self.send_summary_email(email_message, earliest_message_datetime, latest_message_datetime)
@@ -396,9 +457,10 @@ class EmailSummarizer:
             print(f"An error occurred during the summarisation process: {e}")
 
 
+
 if __name__ == "__main__":
     try:
-        summarizer = EmailSummarizer()
+        summarizer = EmailSummariser()
         summarizer.run()
     except KeyboardInterrupt:
         print("Email summarisation process interrupted by user")
