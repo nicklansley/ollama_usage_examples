@@ -450,8 +450,8 @@ class EmailSummariser:
             else:
                 self.messages_list = self.get_gmail_messages()
 
+            process_counter = 1
             for message in self.messages_list:
-                process_counter = 1
                 try:
                     # Other is the initial category for all messages
                     if message['category'] == 'OTHER':
