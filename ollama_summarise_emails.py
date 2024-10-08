@@ -398,10 +398,34 @@ class EmailSummariser:
         with open('email_messages.json', 'w', encoding="utf8") as f:
             json.dump(self.messages_list, f, indent=4)
 
+    def wake_up_ai(self):
+        print('Waking up AI models...')
+        response = ollama.chat(
+            model=self.summarising_ai_model,
+            messages=[
+                {'role': 'system', 'content': 'The user will send you a "wake up" message. Just respond with a pleasantry!'},
+                {'role': 'user', 'content': 'Hello AI, this is a test message to wake you up! I hope you are well!'}
+            ])
+
+        print(f'AI model "{self.summarising_ai_model}" is awake and says: {response["message"]["content"]}')
+
+        response = ollama.chat(
+            model=self.categorising_ai_model,
+            messages=[
+                {'role': 'system', 'content': 'The user will send you a "wake up" message. Just respond with a pleasantry!'},
+                {'role': 'user', 'content': 'Hello AI, this is a test message to wake you up! I hope you are well!'}
+            ])
+
+        print(f'AI model "{self.categorising_ai_model}" is awake and says: {response["message"]["content"]}')
+
+
     def run(self):
         try:
             start_time = datetime.now(timezone.utc)
             print(f'Starting email summarisation process at {start_time}')
+
+            # Wake up the AI models (this causes them to be loaded into memory of they are not already loaded)
+            self.wake_up_ai()
 
             # check if there is a saved list of messages in file 'email_messages.json'.
             # If it exists, load it:
