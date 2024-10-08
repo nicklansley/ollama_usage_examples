@@ -491,11 +491,11 @@ class EmailSummariser:
 
                             self.update_message_list(message['message_id'], message['summary'])
 
-                    process_counter += 1
 
                 except Exception as e:
                     print('Error processing message:', e)
-                    continue
+
+                process_counter += 1
 
             print('All emails summarised successfully - now authoring summary email')
             email_message, earliest_message_datetime, latest_message_datetime = self.author_summary_email(
