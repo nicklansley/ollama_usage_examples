@@ -490,7 +490,9 @@ class EmailSummariser:
                             print('\t\t\tCategory:', message['category'])
 
                             self.update_message_list(message['message_id'], message['summary'])
-                            process_counter += 1
+
+                    process_counter += 1
+
                 except Exception as e:
                     print('Error processing message:', e)
                     continue
