@@ -289,46 +289,62 @@ class EmailSummariser:
         return chosen_category.upper()
 
     def ai_convert_html_to_plain_text(self, email_content: str) -> str:
-        plain_text  = self.call_ai_model(self.summarising_ai_model, self.ai_model_convert_html_to_plain_text_prompt, email_content)
-        return plain_text.replace('\n', '. ').replace('..', '.').strip()
+        try:
+            plain_text  = self.call_ai_model(self.summarising_ai_model, self.ai_model_convert_html_to_plain_text_prompt, email_content)
+            return plain_text.replace('\n', '. ').replace('..', '.').strip()
+        except Exception as e:
+            print('Error converting HTML to plain text: ', e)
+            return ''
 
     def ai_author_category_headlines(self, email_message_list: list) -> str:
         content = ''.join(
             f"From: {message_data['sender']}\nSubject: {message_data['subject']}\nMessage: {message_data['summary']}\n\n"
             for message_data in email_message_list)
 
-        ai_response = self.call_ai_model(
-            self.summarising_ai_model, self.ai_model_category_headlines_prompt, content
-        ).replace('\n', '. ')
+        try:
+            ai_response = self.call_ai_model(
+                self.summarising_ai_model, self.ai_model_category_headlines_prompt, content
+            ).replace('\n', '. ')
 
-        ai_response_sentences = [sentence for sentence in ai_response.split('. ') if
-                                 'summary' not in sentence and 'paragraph' not in sentence and sentence]
-        ai_response = '. '.join(ai_response_sentences)
+            ai_response_sentences = [sentence for sentence in ai_response.split('. ') if
+                                     'summary' not in sentence and 'paragraph' not in sentence and sentence]
+            ai_response = '. '.join(ai_response_sentences)
 
-        if 'In my opinion' in ai_response:
-            ai_response = '<p>' + ai_response.replace('In my opinion', '<br><br><i>In my opinion') + '</i></p>'
-        else:
-            ai_response = '<p>' + ai_response + '</p>'
+            if 'In my opinion' in ai_response:
+                ai_response = '<p>' + ai_response.replace('In my opinion', '<br><br><i>In my opinion') + '</i></p>'
+            else:
+                ai_response = '<p>' + ai_response + '</p>'
 
-        if ai_response.startswith('"') and ai_response.endswith('"'):
-            ai_response = ai_response[1:-1]
+            if ai_response.startswith('"') and ai_response.endswith('"'):
+                ai_response = ai_response[1:-1]
 
-        return ai_response + '. '
+            return ai_response + '. '
+        except Exception as e:
+            print('Error authoring category headlines:', e)
+            return ''
 
     def ai_author_concluding_paragraph(self, email_body_text: str) -> str:
         print('Authoring concluding paragraph...')
-        return self.call_ai_model(
-            self.summarising_ai_model, self.ai_model_concluding_summary_prompt, email_body_text
-        )
+        try:
+            return self.call_ai_model(
+                self.summarising_ai_model, self.ai_model_concluding_summary_prompt, email_body_text
+            )
+        except Exception as e:
+            print('Error authoring concluding paragraph:', e)
+            return ''
 
     def ai_author_overall_headlines(self, summarised_group_content: str) -> str:
         print('Authoring top headlines summary...')
-        headlines =  self.call_ai_model(
-            self.summarising_ai_model, self.ai_model_top_headlines_prompt, summarised_group_content
-        )
-        # Put in two line breaks every fourth sentence to make the text more readable
-        headlines = '.<br><br>'.join([sentence for i, sentence in enumerate(headlines.split('. ')) if i % 4 != 0])
-        return headlines
+        try:
+            headlines =  self.call_ai_model(
+                self.summarising_ai_model, self.ai_model_top_headlines_prompt, summarised_group_content
+            )
+            # Put in two line breaks every fourth sentence to make the text more readable
+            headlines = '.<br><br>'.join([sentence for i, sentence in enumerate(headlines.split('. ')) if i % 4 != 0])
+            return headlines
+        except Exception as e:
+            print('Error authoring overall headlines:', e)
+            return ''
 
     def update_message_list(self, message_id: str, summary: str):
         for message in self.messages_list:
@@ -338,46 +354,50 @@ class EmailSummariser:
                 break
 
     def author_summary_email(self, email_list: list) -> tuple:
-        earliest_message = email_list[0]["date_sent"]
-        latest_message = email_list[-1]["date_sent"]
+        try:
+            earliest_message = email_list[0]["date_sent"]
+            latest_message = email_list[-1]["date_sent"]
 
-        email_body = f"<p>Here are the AI-powered summaries of the emails from {earliest_message} to {latest_message}:<br><br></p>"
-        categories_list = sorted(set(message["category"] for message in email_list))
+            email_body = f"<p>Here are the AI-powered summaries of the emails from {earliest_message} to {latest_message}:<br><br></p>"
+            categories_list = sorted(set(message["category"] for message in email_list))
 
-        if 'PERSONAL' in categories_list:
-            categories_list.remove('PERSONAL')
-            categories_list.insert(0, 'PERSONAL')
+            if 'PERSONAL' in categories_list:
+                categories_list.remove('PERSONAL')
+                categories_list.insert(0, 'PERSONAL')
 
-        if 'NEWS' in categories_list:
-            categories_list.remove('NEWS')
-            categories_list.insert(1, 'NEWS')
+            if 'NEWS' in categories_list:
+                categories_list.remove('NEWS')
+                categories_list.insert(1, 'NEWS')
 
-        category_counter = 0
-        for category in categories_list:
-            category_counter += 1
-            filtered_messages_list = [message for message in email_list if message["category"] == category]
-            print(
-                f'Processing category: {category} ({category_counter} of {len(categories_list)}) - {len(filtered_messages_list)} messages...')
-            email_body += f'<hr>Category: {category} (from {len(filtered_messages_list)} messages)<br>'
-            email_body += f' >>> {category}:<br>'
-            email_body += self.ai_author_category_headlines(filtered_messages_list)
-            email_body += '\n\n'
+            category_counter = 0
+            for category in categories_list:
+                category_counter += 1
+                filtered_messages_list = [message for message in email_list if message["category"] == category]
+                print(
+                    f'Processing category: {category} ({category_counter} of {len(categories_list)}) - {len(filtered_messages_list)} messages...')
+                email_body += f'<hr>Category: {category} (from {len(filtered_messages_list)} messages)<br>'
+                email_body += f' >>> {category}:<br>'
+                email_body += self.ai_author_category_headlines(filtered_messages_list)
+                email_body += '\n\n'
 
-        if self.NEWSREADER_SCRIPT:
-            email_body = '<p>Overall Headline Summary:<br>' + self.ai_author_overall_headlines(
-                email_body) + '<br><br>' + email_body + '</p>'
+            if self.NEWSREADER_SCRIPT:
+                email_body = '<p>Overall Headline Summary:<br>' + self.ai_author_overall_headlines(
+                    email_body) + '<br><br>' + email_body + '</p>'
 
-        if self.INDIVIDUAL_EMAIL_SUMMARIES:
-            for message in email_list:
-                email_body += '----------------------------------------<br><br>'
-                email_body += f"From: {message['sender']}<br>"
-                email_body += f"Date: {message.get('date_sent', 'unknown')}<br>"
-                email_body += f"Subject: {message['subject']}<br>"
-                email_body += f"Category: {message['category']}<br>"
-                email_body += f"Summary: {message['summary']}<br><br>"
+            if self.INDIVIDUAL_EMAIL_SUMMARIES:
+                for message in email_list:
+                    email_body += '----------------------------------------<br><br>'
+                    email_body += f"From: {message['sender']}<br>"
+                    email_body += f"Date: {message.get('date_sent', 'unknown')}<br>"
+                    email_body += f"Subject: {message['subject']}<br>"
+                    email_body += f"Category: {message['category']}<br>"
+                    email_body += f"Summary: {message['summary']}<br><br>"
 
-        email_body += '<hr>Concluding Paragraph:<br>' + self.ai_author_concluding_paragraph(email_body)
-        return email_body, earliest_message, latest_message
+            email_body += '<hr>Concluding Paragraph:<br>' + self.ai_author_concluding_paragraph(email_body)
+            return email_body, earliest_message, latest_message
+        except Exception as e:
+            print('Error authoring summary email:', e)
+            return '', '', ''
 
     def send_summary_email(self, email_body: str, earliest_datetime: str, latest_datetime: str):
         if not self.gmail_account_username or not self.gmail_account_password:
@@ -385,14 +405,18 @@ class EmailSummariser:
                 "Email gmail_account_username or gmail_account_password not set in environment variables or .env file")
             exit(1)
 
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(self.gmail_account_username, self.gmail_account_password)
-            msg = email.message.EmailMessage()
-            msg['Subject'] = f'Summary of messages from {earliest_datetime} to {latest_datetime}'
-            msg['From'] = self.gmail_account_username
-            msg['To'] = self.gmail_account_username
-            msg.add_alternative(email_body, subtype='html')
-            server.send_message(msg)
+        try:
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                server.login(self.gmail_account_username, self.gmail_account_password)
+                msg = email.message.EmailMessage()
+                msg['Subject'] = f'Summary of messages from {earliest_datetime} to {latest_datetime}'
+                msg['From'] = self.gmail_account_username
+                msg['To'] = self.gmail_account_username
+                msg.add_alternative(email_body, subtype='html')
+                server.send_message(msg)
+                print('Summary email sent successfully')
+        except Exception as e:
+            print('Error sending summary email:', e)
 
     def save_messages_list_to_file(self):
         with open('email_messages.json', 'w', encoding="utf8") as f:
@@ -400,23 +424,26 @@ class EmailSummariser:
 
     def wake_up_ai(self):
         print('Waking up AI models...')
-        response = ollama.chat(
-            model=self.summarising_ai_model,
-            messages=[
-                {'role': 'system', 'content': 'The user will send you a "wake up" message. Just respond with a pleasantry!'},
-                {'role': 'user', 'content': 'Hello AI, this is a test message to wake you up! I hope you are well!'}
-            ])
+        try:
+            response = ollama.chat(
+                model=self.summarising_ai_model,
+                messages=[
+                    {'role': 'system', 'content': 'The user will send you a "wake up" message. Just respond with a pleasantry!'},
+                    {'role': 'user', 'content': 'Hello AI, this is a test message to wake you up! I hope you are well!'}
+                ])
 
-        print(f'AI model "{self.summarising_ai_model}" is awake and says: {response["message"]["content"]}')
+            print(f'AI model "{self.summarising_ai_model}" is awake and says: {response["message"]["content"]}')
 
-        response = ollama.chat(
-            model=self.categorising_ai_model,
-            messages=[
-                {'role': 'system', 'content': 'The user will send you a "wake up" message. Just respond with a pleasantry!'},
-                {'role': 'user', 'content': 'Hello AI, this is a test message to wake you up! I hope you are well!'}
-            ])
+            response = ollama.chat(
+                model=self.categorising_ai_model,
+                messages=[
+                    {'role': 'system', 'content': 'The user will send you a "wake up" message. Just respond with a pleasantry!'},
+                    {'role': 'user', 'content': 'Hello AI, this is a test message to wake you up! I hope you are well!'}
+                ])
 
-        print(f'AI model "{self.categorising_ai_model}" is awake and says: {response["message"]["content"]}')
+            print(f'AI model "{self.categorising_ai_model}" is awake and says: {response["message"]["content"]}')
+        except Exception as e:
+            print(f'Error waking up AI models: {e}')
 
 
     def run(self):
@@ -439,30 +466,34 @@ class EmailSummariser:
                 self.messages_list = self.get_gmail_messages()
 
             for message in self.messages_list:
-                process_counter = 1
-                # Other is the initial category for all messages
-                if message['category'] == 'OTHER':
-                    if len(message['plain_text']) > 0:
-                        email_text = message['plain_text']
-                    elif len(message['html']) > 0:
-                        print('Converting HTML to plain text using AI')
-                        email_text = self.ai_convert_html_to_plain_text(message['html'])
-                    else:
-                        email_text = ''
+                try:
+                    process_counter = 1
+                    # Other is the initial category for all messages
+                    if message['category'] == 'OTHER':
+                        if len(message['plain_text']) > 0:
+                            email_text = message['plain_text']
+                        elif len(message['html']) > 0:
+                            print('Converting HTML to plain text using AI')
+                            email_text = self.ai_convert_html_to_plain_text(message['html'])
+                        else:
+                            email_text = ''
 
-                    if len(email_text) < 100:
-                        print('Email content too short to summarise')
-                    else:
-                        print('Processing message:', process_counter, 'of', len(self.messages_list),
-                              ' - ', round(len(email_text) / 1000, 1), 'Kb from', message['sender'],
-                              '\n\t\t\twith subject:', message['subject'])
-                        message['summary'] = self.ai_summarise_email(email_text)
-                        message['category'] = self.ai_categorise_email(message['summary'])
+                        if len(email_text) < 100:
+                            print('Email content too short to summarise')
+                        else:
+                            print('Processing message:', process_counter, 'of', len(self.messages_list),
+                                  ' - ', round(len(email_text) / 1000, 1), 'Kb from', message['sender'],
+                                  '\n\t\t\twith subject:', message['subject'])
+                            message['summary'] = self.ai_summarise_email(email_text)
+                            message['category'] = self.ai_categorise_email(message['summary'])
 
-                        print('\t\t\tCategory:', message['category'])
+                            print('\t\t\tCategory:', message['category'])
 
-                        self.update_message_list(message['message_id'], message['summary'])
-                        process_counter += 1
+                            self.update_message_list(message['message_id'], message['summary'])
+                            process_counter += 1
+                except Exception as e:
+                    print('Error processing message:', e)
+                    continue
 
             print('All emails summarised successfully - now authoring summary email')
             email_message, earliest_message_datetime, latest_message_datetime = self.author_summary_email(
