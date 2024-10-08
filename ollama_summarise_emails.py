@@ -25,8 +25,7 @@ class EmailSummariser:
         self.ai_model_concluding_summary_prompt = ""
         self.ai_model_category_headlines_prompt = ""
         self.ai_model_top_headlines_prompt = ""
-        self.ai_model_category_prompt = ""
-        self.ai_model_content_prompt = ""
+        self.ai_model_combined_prompt = ""
         self.ai_model_convert_html_to_plain_text_prompt = ""
         self.gmail_account_username = os.getenv("GMAIL_USERNAME")
         self.gmail_account_password = os.getenv("GMAIL_PASSWORD")
@@ -46,20 +45,20 @@ class EmailSummariser:
         self.init_ai_prompts()
 
     def init_ai_prompts(self):
-        self.ai_model_content_prompt = """
-        You are an expert at summarising email messages. 
-        You prefer to use clauses instead of complete sentences in order to make your summary concise and to the point.
-        Be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats.
-        Do not answer any questions you may find in the messages. Use British English spelling.
-        The user will provide you with a message to summarise. This message will have been received within the previous <HOURS_TO_FETCH> hours.
-        """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
-
-        self.ai_model_category_prompt = """
-        Your task is to categorize an email with a single word. 
-        Choose from the provided list or select your own single-word category if needed. 
-        Respond with only the category word. Here is a list of possible categories:
-        - Business, Charity, Education, Entertainment, Environment, Finance, Food, Government, Health, LGBTQ+, Legal,
-          News, Personal, Promotional, Religion, Science, Shopping, Social, Sport, Technology, Travel, Work.
+        self.ai_model_combined_prompt = """
+        You are tasked with both categorising and summarising email messages. 
+        
+        First, categorize the email using a single word. 
+        Choose from this list of possible categories:
+        - Business, Charity, Education, Entertainment, Environment, Finance, Food, Government, Health, LGBTQ+, Legal, News, Personal, Promotional, Religion, Science, Shopping, Social, Sport, Technology, Travel, Work.
+        If the content doesn't fit any of these categories, feel free to select your own single-word category.
+        
+        Next, summarise the message. 
+        You are an expert at summarising email messages and prefer to use clauses instead of complete sentences in order to make your summary concise and to the point. Be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats. Do not answer any questions you may find in the messages. Use British English spelling.
+        
+        Respond with the category word as the very first word, followed by a colon, then the summary of the message.
+        
+        The user will provide you with a message to categorize and summarise. This message will have been received within the previous <HOURS_TO_FETCH> hours.
         """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
 
         self.ai_model_top_headlines_prompt = """
@@ -258,7 +257,7 @@ class EmailSummariser:
             model=self.summarising_ai_model,
             options={"num_ctx": self.NUM_CTX},
             messages=[
-                {'role': 'system', 'content': self.ai_model_content_prompt},
+                {'role': 'system', 'content': self.ai_model_combined_prompt},
                 {'role': 'user', 'content': email_content},
             ])
         return response['message']['content'].strip().replace('\n', '.')
@@ -273,20 +272,6 @@ class EmailSummariser:
 
         return response['message']['content'].strip()
 
-    def ai_categorise_email(self, email_content: str) -> str:
-        chosen_category = ' '
-        attempt_count = 0
-
-        while ' ' in chosen_category and attempt_count < 5:
-            chosen_category = self.call_ai_model(
-                self.categorising_ai_model, self.ai_model_category_prompt, email_content
-            ).replace('\n', '.').strip()
-            attempt_count += 1
-
-        if ' ' in chosen_category and len(chosen_category) > 1:
-            chosen_category = 'Other'
-
-        return chosen_category.upper()
 
     def ai_convert_html_to_plain_text(self, email_content: str) -> str:
         try:
@@ -484,13 +469,19 @@ class EmailSummariser:
                             print('Processing message:', process_counter, 'of', len(self.messages_list),
                                   ' - ', round(len(email_text) / 1000, 1), 'Kb from', message['sender'],
                                   '\n\t\t\twith subject:', message['subject'])
-                            message['summary'] = self.ai_summarise_email(email_text)
-                            message['category'] = self.ai_categorise_email(message['summary'])
+
+                            response = self.ai_summarise_email(email_text)
+
+                            # The frst word of the response is the category
+                            message['category'] = response.split(':')[0].strip().upper()
+
+                            # The rest of the response is the summary
+                            message['summary'] = response.split(':')[1].strip()
+
 
                             print('\t\t\tCategory:', message['category'])
 
                             self.update_message_list(message['message_id'], message['summary'])
-
 
                 except Exception as e:
                     print('Error processing message:', e)
