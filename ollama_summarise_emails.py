@@ -1,12 +1,13 @@
+from datetime import datetime, timedelta, timezone
+from email.header import decode_header
+import datetime
 import email
 import email.message
 import imaplib
 import json
 import os
-from datetime import datetime, timedelta, timezone
-from email.header import decode_header
+import re
 import smtplib
-from typing import TextIO
 
 from dotenv import load_dotenv
 import ollama
@@ -18,6 +19,13 @@ def fetch_email_by_id(mail, email_id):
     status, msg_data = mail.fetch(email_id, "(RFC822)")
     raw_email = msg_data[0][1]
     return email.message_from_bytes(raw_email)
+
+def format_concluding_paragraph(paragraph: str) -> str:
+    # Regular expression to find numeric bullet points
+    regex = r"(\d+\.\s)"
+    # Substitute the matches with <br> following the pattern
+    formatted_paragraph = re.sub(regex, r"<br>\1", paragraph)
+    return formatted_paragraph
 
 
 class EmailSummariser:
@@ -83,6 +91,8 @@ class EmailSummariser:
         Write a concluding paragraph for a news bulletin, expressing your own opinion and observations on 
         the messages received in the past <HOURS_TO_FETCH> hours. 
         Begin the paragraph with "In conclusion, ".
+        After writing this paragraph, list the top 10 messages you think are the most important, explaining why in each case.
+        Start this list with "Top 10 messages to read first:"
         """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
 
         self.ai_model_convert_html_to_plain_text_prompt = """
@@ -93,13 +103,16 @@ class EmailSummariser:
     @staticmethod
     def format_body(body_text: str) -> str:
         # replace all '\uXXXX' characters with a space
-        body_text = body_text.encode('ascii', 'ignore').decode('ascii')
+        processed_text = body_text.encode('ascii', 'ignore').decode('ascii')
+
+        # Remove any web addresses by searching for 'https', 'http' and 'www', then removing the text up to the next space
+        processed_text = ' '.join([word for word in processed_text.split() if 'https' not in word and 'http' not in word and 'www' not in word])
 
         # remove any extra spaces
-        while '  ' in body_text:
-            body_text = body_text.replace('  ', ' ')
+        while '  ' in processed_text:
+            processed_text = processed_text.replace('  ', ' ')
 
-        return body_text
+        return processed_text
 
     def get_gmail_messages(self):
         if not self.gmail_account_username or not self.gmail_account_password:
@@ -140,45 +153,76 @@ class EmailSummariser:
             print(f'Error fetching message IDs: {e}')
             return []
 
+    def fetch_messages(self, mail, message_id_list):
+        email_list = []
+        for current_email_id in message_id_list:
+            msg = fetch_email_by_id(mail, current_email_id)
+            msg_data = self.extract_email_data(msg)
+            print('.', end='', flush=True)
+            email_list.append(msg_data)
+        return email_list
+
+    def filter_recent_emails(self, email_list):
+        date_hours_ago = datetime.now(timezone.utc) - timedelta(hours=self.HOURS_TO_FETCH)
+        recent_emails = []
+
+        for msg_data in email_list:
+            if not msg_data['date_sent']:
+                continue
+
+            try:
+                email_date = datetime.strptime(msg_data['date_sent'], '%a, %d %b %Y %H:%M:%S %z')
+                if email_date < date_hours_ago:
+                    continue
+            except:
+                continue
+
+            recent_emails.append(msg_data)
+        return recent_emails
+
+    def filter_ignored_senders(self, email_list):
+        filtered_emails = [msg for msg in email_list if msg['sender'] not in self.ignore_sender_list]
+        return filtered_emails
+
+    def deduplicate_emails(self, email_list):
+        deduped_email_list = []
+        sorted_email_list = sorted(
+            email_list,
+            key=lambda x: datetime.strptime(x['date_sent'], '%a, %d %b %Y %H:%M:%S %z'),
+            reverse=True
+        )
+
+        before_deduped_count = len(sorted_email_list)
+
+        for message in sorted_email_list:
+
+            if not any(
+                    message['sender'] == deduped_email['sender'] and message['subject'] == deduped_email['subject']
+                    for deduped_email in deduped_email_list
+            ):
+                deduped_email_list.append(message)
+
+        after_deduped_count = len(deduped_email_list)
+
+        if after_deduped_count < before_deduped_count:
+            print(before_deduped_count - after_deduped_count, 'emails were duplicates and have been removed')
+
+        return deduped_email_list
+
     def fetch_and_filter_messages(self, mail, message_id_list):
         try:
-            email_list = []
-            counter = 0
-            date_hours_ago = datetime.now(timezone.utc) - timedelta(hours=self.HOURS_TO_FETCH)
-            for current_email_id in message_id_list:
-                msg = fetch_email_by_id(mail, current_email_id)
-                msg_data = self.extract_email_data(msg)
-                print('.', end='', flush=True)
-
-                # check that msg_data['date_sent'] is not None and is also within the last HOURS_TO_FETCH hours
-                if not msg_data['date_sent']:
-                    continue
-                else:
-                    try:
-                        email_date = datetime.strptime(msg_data['date_sent'], '%a, %d %b %Y %H:%M:%S %z')
-                        if email_date < date_hours_ago:
-                            continue
-                    except:
-                        continue
-
-                if msg_data['sender'] in self.ignore_sender_list:
-                    continue
-
-                email_list.append(msg_data)
-
-                counter += 1
-                if counter % 50 == 0:
-                    print(f' - {counter}', end='', flush=True)
-                    print()
+            email_list = self.fetch_messages(mail, message_id_list)
+            email_list = self.filter_recent_emails(email_list)
+            email_list = self.filter_ignored_senders(email_list)
+            email_list = self.deduplicate_emails(email_list)
 
             print(f'{len(email_list)} messages found with readable text in the body of the message')
+            return email_list
 
         except Exception as e:
             print('Error fetching and filtering messages:', e)
             print('Traceback:', e.__traceback__.tb_lineno)
             return []
-
-        return email_list
 
     def extract_email_data(self, msg) -> dict:
         try:
@@ -311,9 +355,11 @@ class EmailSummariser:
     def ai_author_concluding_paragraph(self, email_body_text: str) -> str:
         print('Authoring concluding paragraph...')
         try:
-            return self.call_ai_model(
+            paragraph = self.call_ai_model(
                 self.summarising_ai_model, self.ai_model_concluding_summary_prompt, email_body_text
             )
+            return format_concluding_paragraph(paragraph)
+
         except Exception as e:
             print('Error authoring concluding paragraph:', e)
             return ''
