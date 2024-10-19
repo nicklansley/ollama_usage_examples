@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, timezone
 from email.header import decode_header
-import datetime
 import email
 import email.message
 import imaplib
@@ -24,7 +23,10 @@ def format_concluding_paragraph(paragraph: str) -> str:
     # Regular expression to find numeric bullet points
     regex = r"(\d+\.\s)"
     # Substitute the matches with <br> following the pattern
-    formatted_paragraph = re.sub(regex, r"<br>\1", paragraph)
+    formatted_paragraph = re.sub(regex, r"<br><br>\1", paragraph)
+
+    # Look for phrase 'Top 10 messages to read first:' and replace with '<br><br>Top 10 messages to read first:<br><br>'
+    formatted_paragraph = formatted_paragraph.replace('Top 10 messages to read first:', '<br><br>Top 10 messages to read first:<br><br>')
     return formatted_paragraph
 
 
@@ -45,7 +47,11 @@ class EmailSummariser:
         self.HOURS_TO_FETCH = int(self.HOURS_TO_FETCH) if self.HOURS_TO_FETCH.isdigit() else 24
 
         self.ignore_sender_list = ["nick@lansley.com"]
-        self.messages_list = []
+        
+        self.messages_data = {
+            'messages_list': [],
+            'category_summary_dict': {}
+        }
 
         self.categorising_ai_model = os.getenv("CATEGORISING_AI_MODEL", 'llama3.1:latest')
         self.summarising_ai_model = os.getenv("SUMMARISING_AI_MODEL", 'llama3.1:latest')
@@ -84,13 +90,16 @@ class EmailSummariser:
         single-paragraph news bulletin summary, highlighting noteworthy points even if the emails seem mundane. 
         Be concise, use British English spelling. Make it easy for the newsreader to present the information,  
         and conclude with your personal observations starting with "In my opinion...".
+        Start your output with the actual script. NO need to say 'Good morning / evening' or 'This is the news' or
+        'Here are the headlines' or similar. No I'm [Newsreader] or similar. Just the news. This is so that your
+        paragraph and opinion can be used in the middle of a larger script of which your output forms part.
         """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
 
         self.ai_model_concluding_summary_prompt = """
         You are an expert scriptwriter for a news radio station. 
         Write a concluding paragraph for a news bulletin, expressing your own opinion and observations on 
         the messages received in the past <HOURS_TO_FETCH> hours. 
-        Begin the paragraph with "In conclusion, ".
+        Begin your output with "In conclusion, ".
         After writing this paragraph, list the top 10 messages you think are the most important, explaining why in each case.
         Start this list with "Top 10 messages to read first:"
         """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
@@ -205,7 +214,7 @@ class EmailSummariser:
         after_deduped_count = len(deduped_email_list)
 
         if after_deduped_count < before_deduped_count:
-            print(before_deduped_count - after_deduped_count, 'emails were duplicates and have been removed')
+            print('\n', before_deduped_count - after_deduped_count, 'emails were duplicates and have been removed')
 
         return deduped_email_list
 
@@ -378,7 +387,7 @@ class EmailSummariser:
             return ''
 
     def update_message_list(self, message_id: str, summary: str):
-        for message in self.messages_list:
+        for message in self.messages_data['messages_list']:
             if message['message_id'] == message_id:
                 message['summary'] = summary
                 self.save_messages_list_to_file()
@@ -401,19 +410,26 @@ class EmailSummariser:
                 categories_list.insert(1, 'NEWS')
 
             category_counter = 0
+
+            if 'category_summary_dict' not in self.messages_data or not self.messages_data.get('category_summary_dict'):
+                self.messages_data['category_summary_dict'] = {}
+
             for category in categories_list:
-                category_counter += 1
                 filtered_messages_list = [message for message in email_list if message["category"] == category]
-                print(
-                    f'Processing category: {category} ({category_counter} of {len(categories_list)}) - {len(filtered_messages_list)} messages...')
+                if category not in self.messages_data.get('category_summary_dict', {}) or self.messages_data['category_summary_dict'][category] == '':
+                    category_counter += 1
+                    print(f'Processing category: {category} ({category_counter} of {len(categories_list)}) - {len(filtered_messages_list)} messages...')
+                    self.messages_data['category_summary_dict'][category] = self.ai_author_category_headlines(filtered_messages_list)
+                    self.save_messages_list_to_file()
+
                 email_body += f'<hr>Category: {category} (from {len(filtered_messages_list)} messages)<br>'
-                email_body += f' >>> {category}:<br>'
-                email_body += self.ai_author_category_headlines(filtered_messages_list)
+                email_body += self.messages_data['category_summary_dict'][category]
                 email_body += '\n\n'
 
-            if self.NEWSREADER_SCRIPT:
-                email_body = '<p>Overall Headline Summary:<br>' + self.ai_author_overall_headlines(
-                    email_body) + '<br><br>' + email_body + '</p>'
+            if self.NEWSREADER_SCRIPT and ('headlines_summary' not in self.messages_data.get('headlines_summary', {}) or self.messages_data['headlines_summary'] == ''):
+                self.messages_data['headlines_summary'] = self.ai_author_overall_headlines(email_body)
+
+            email_body = '<p>Overall Headline Summary:<br>' + self.messages_data['headlines_summary'] + '<br><br>' + email_body + '</p>'
 
             if self.INDIVIDUAL_EMAIL_SUMMARIES:
                 for message in email_list:
@@ -424,8 +440,14 @@ class EmailSummariser:
                     email_body += f"Category: {message['category']}<br>"
                     email_body += f"Summary: {message['summary']}<br><br>"
 
-            email_body += '<hr>Concluding Paragraph:<br>' + self.ai_author_concluding_paragraph(email_body)
+            if 'concluding_paragraph' not in self.messages_data.get('concluding_paragraph', {}) or self.messages_data['concluding_paragraph'] == '':
+                self.messages_data['concluding_paragraph'] = self.ai_author_concluding_paragraph(email_body)
+                self.save_messages_list_to_file()
+
+            email_body += '<hr>Concluding Paragraph:<br>' + self.messages_data['concluding_paragraph']
+
             return email_body, earliest_message, latest_message
+
         except Exception as e:
             print('Error authoring summary email:', e)
             return '', '', ''
@@ -451,7 +473,7 @@ class EmailSummariser:
 
     def save_messages_list_to_file(self):
         with open('email_messages.json', 'w', encoding="utf8") as f:
-            json.dump(self.messages_list, f, indent=4)
+            json.dump(self.messages_data, f, indent=4)
 
     def wake_up_ai(self):
         print('Waking up AI models...')
@@ -490,14 +512,14 @@ class EmailSummariser:
             if os.path.exists('email_messages.json'):
                 with open('email_messages.json', 'r', encoding="utf8") as f:
                     if input('Do you want to use the saved email messages list? (y/n) > ') == 'y':
-                        self.messages_list = json.load(f)
+                        self.messages_data = json.load(f)
                     else:
-                        self.messages_list = self.get_gmail_messages()
+                        self.messages_data['messages_list'] = self.get_gmail_messages()
             else:
-                self.messages_list = self.get_gmail_messages()
+                self.messages_data['messages_list'] = self.get_gmail_messages()
 
             process_counter = 1
-            for message in self.messages_list:
+            for message in self.messages_data['messages_list']:
                 try:
                     # Other is the initial category for all messages
                     if message['category'] == 'OTHER':
@@ -512,17 +534,20 @@ class EmailSummariser:
                         if len(email_text) < 100:
                             print('Email content too short to summarise')
                         else:
-                            print('Processing message:', process_counter, 'of', len(self.messages_list),
+                            print('Processing message:', process_counter, 'of', len(self.messages_data['messages_list']),
                                   ' - ', round(len(email_text) / 1000, 1), 'Kb from', message['sender'],
                                   '\n\t\t\twith subject:', message['subject'])
-
-                            response = self.ai_summarise_email(email_text)
-
-                            # The frst word of the response is the category
-                            message['category'] = response.split(':')[0].strip().upper()
-
-                            # The rest of the response is the summary
-                            message['summary'] = response.split(':')[1].strip()
+                            
+                            # If the category is empty, 'OTHER' or contains a space, get the AI to summarise the email
+                            # and if necessary, resummarise it!
+                            while message['category'] == '' or message['category'] == 'OTHER' or ' ' in message['category']:
+                                response = self.ai_summarise_email(email_text)
+    
+                                # The frst word of the response is the category
+                                message['category'] = response.split(':')[0].strip().upper()
+    
+                                # The rest of the response is the summary
+                                message['summary'] = response.split(':')[1].strip()
 
 
                             print('\t\t\tCategory:', message['category'])
@@ -536,7 +561,7 @@ class EmailSummariser:
 
             print('All emails summarised successfully - now authoring summary email')
             email_message, earliest_message_datetime, latest_message_datetime = self.author_summary_email(
-                self.messages_list)
+                self.messages_data['messages_list'])
 
             print('Now sending summary email to', self.gmail_account_username)
             self.send_summary_email(email_message, earliest_message_datetime, latest_message_datetime)
