@@ -13,6 +13,11 @@ import ollama
 
 load_dotenv()
 
+allowed_categories_list = [
+    'BUSINESS', 'CHARITY', 'EDUCATION', 'ENTERTAINMENT', 'ENVIRONMENT', 'FINANCE', 'FOOD', 'GOVERNMENT', 'HEALTH',
+    'LGBTQ+', 'LEGAL', 'NEWS', 'PERSONAL', 'PROMOTIONAL', 'RELIGION', 'SCIENCE', 'SHOPPING', 'SOCIAL', 'SPORT',
+    'TECHNOLOGY', 'TRAVEL', 'WORK'
+]
 
 def fetch_email_by_id(mail, email_id):
     status, msg_data = mail.fetch(email_id, "(RFC822)")
@@ -63,12 +68,13 @@ class EmailSummariser:
         You are tasked with both categorising and summarising email messages. 
         
         First, categorize the email using a single word. 
-        Choose from this list of possible categories:
-        - Business, Charity, Education, Entertainment, Environment, Finance, Food, Government, Health, LGBTQ+, Legal, News, Personal, Promotional, Religion, Science, Shopping, Social, Sport, Technology, Travel, Work.
-        If the content doesn't fit any of these categories, feel free to select your own single-word category.
+        Choose from this list of categories. Do not use any other categories.:
+        {allowed_categories_list}
         
         Next, summarise the message. 
-        You are an expert at summarising email messages and prefer to use clauses instead of complete sentences in order to make your summary concise and to the point. Be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats. Do not answer any questions you may find in the messages. Use British English spelling.
+        You are an expert at summarising email messages and prefer to use clauses instead of complete sentences in order to make your summary concise and to the point. 
+        Be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats. 
+        Do not answer any questions you may find in the messages. Use British English spelling.
         
         Respond with the category word as the very first word, followed by a colon, then the summary of the message.
         
@@ -108,6 +114,10 @@ class EmailSummariser:
         You are an expert at converting HTML content to plain text. There is no need to retain any formatting or links,
         just return the plain text content. The user will provide you with an HTML message to convert.
         """
+
+    def add_categories_to_prompt(self):
+        self.ai_model_combined_prompt = self.ai_model_combined_prompt.replace(
+            '{allowed_categories_list}', ', '.join(allowed_categories_list))
 
     @staticmethod
     def format_body(body_text: str) -> str:
@@ -507,6 +517,9 @@ class EmailSummariser:
             # Wake up the AI models (this causes them to be loaded into memory of they are not already loaded)
             self.wake_up_ai()
 
+            # Add the allowed categories to the summarising prompt
+            self.add_categories_to_prompt()
+
             # check if there is a saved list of messages in file 'email_messages.json'.
             # If it exists, load it:
             if os.path.exists('email_messages.json'):
@@ -540,7 +553,7 @@ class EmailSummariser:
                             
                             # If the category is empty, 'OTHER' or contains a space, get the AI to summarise the email
                             # and if necessary, resummarise it!
-                            while message['category'] == '' or message['category'] == 'OTHER' or ' ' in message['category']:
+                            while message['category'] not in allowed_categories_list:
                                 response = self.ai_summarise_email(email_text)
     
                                 # The frst word of the response is the category
