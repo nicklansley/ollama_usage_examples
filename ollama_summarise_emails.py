@@ -278,8 +278,9 @@ class EmailSummariser:
             'plain_text': self.format_body(plain_text),
             'html': html,
             'summary': '',
-            'category': 'OTHER'
+            'category': 'UNPROCESSED'
         }
+
 
     @staticmethod
     def decode_mime_header(header_value: str) -> str:
@@ -425,6 +426,9 @@ class EmailSummariser:
                 self.messages_data['category_summary_dict'] = {}
 
             for category in categories_list:
+                if not category or category == 'UNPROCESSED':
+                    continue
+
                 filtered_messages_list = [message for message in email_list if message["category"] == category]
                 if category not in self.messages_data.get('category_summary_dict', {}) or self.messages_data['category_summary_dict'][category] == '':
                     category_counter += 1
@@ -534,8 +538,8 @@ class EmailSummariser:
             process_counter = 1
             for message in self.messages_data['messages_list']:
                 try:
-                    # Other is the initial category for all messages
-                    if message['category'] == 'OTHER':
+                    # 'UNPROCESSED' is the initial category for all messages
+                    if message['category'] == 'UNPROCESSED':
                         if len(message['plain_text']) > 0:
                             email_text = message['plain_text']
                         elif len(message['html']) > 0:
@@ -551,8 +555,8 @@ class EmailSummariser:
                                   ' - ', round(len(email_text) / 1000, 1), 'Kb from', message['sender'],
                                   '\n\t\t\twith subject:', message['subject'])
                             
-                            # If the category is empty, 'OTHER' or contains a space, get the AI to summarise the email
-                            # and if necessary, resummarise it!
+                            # If the category is empty, 'UNOPROCESSED' or contains a space, get the AI to summarise the email
+                            # and if necessary, re-summarise it!
                             while message['category'] not in allowed_categories_list:
                                 response = self.ai_summarise_email(email_text)
     
