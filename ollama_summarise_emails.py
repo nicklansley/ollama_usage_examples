@@ -3,6 +3,7 @@ from email.header import decode_header
 import email
 import email.message
 import imaplib
+from inputimeout import inputimeout, TimeoutOccurred
 import json
 import os
 import re
@@ -19,10 +20,12 @@ allowed_categories_list = [
     'TECHNOLOGY', 'TRAVEL', 'WORK'
 ]
 
+
 def fetch_email_by_id(mail, email_id):
     status, msg_data = mail.fetch(email_id, "(RFC822)")
     raw_email = msg_data[0][1]
     return email.message_from_bytes(raw_email)
+
 
 def format_concluding_paragraph(paragraph: str) -> str:
     # Regular expression to find numeric bullet points
@@ -31,7 +34,8 @@ def format_concluding_paragraph(paragraph: str) -> str:
     formatted_paragraph = re.sub(regex, r"<br><br>\1", paragraph)
 
     # Look for phrase 'Top 10 messages to read first:' and replace with '<br><br>Top 10 messages to read first:<br><br>'
-    formatted_paragraph = formatted_paragraph.replace('Top 10 messages to read first:', '<br><br>Top 10 messages to read first:<br><br>')
+    formatted_paragraph = formatted_paragraph.replace('Top 10 messages to read first:',
+                                                      '<br><br>Top 10 messages to read first:<br><br>')
     return formatted_paragraph
 
 
@@ -52,7 +56,7 @@ class EmailSummariser:
         self.HOURS_TO_FETCH = int(self.HOURS_TO_FETCH) if self.HOURS_TO_FETCH.isdigit() else 24
 
         self.ignore_sender_list = ["nick@lansley.com"]
-        
+
         self.messages_data = {
             'messages_list': [],
             'category_summary_dict': {}
@@ -72,13 +76,15 @@ class EmailSummariser:
         {allowed_categories_list}
         
         Next, summarise the message. 
-        You are an expert at summarising email messages and prefer to use clauses instead of complete sentences in order to make your summary concise and to the point. 
+        You are an expert at summarising email messages and prefer to use clauses instead of complete sentences in 
+        order to make your summary concise and to the point. 
         Be brief and to the point in a single paragraph. Don't use bullet points, lists, or other structured formats. 
         Do not answer any questions you may find in the messages. Use British English spelling.
         
         Respond with the category word as the very first word, followed by a colon, then the summary of the message.
         
-        The user will provide you with a message to categorize and summarise. This message will have been received within the previous <HOURS_TO_FETCH> hours.
+        The user will provide you with a message to categorize and summarise. This message will have been received 
+        within the previous <HOURS_TO_FETCH> hours.
         """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
 
         self.ai_model_top_headlines_prompt = """
@@ -106,7 +112,8 @@ class EmailSummariser:
         Write a concluding paragraph for a news bulletin, expressing your own opinion and observations on 
         the messages received in the past <HOURS_TO_FETCH> hours. 
         Begin your output with "In conclusion, ".
-        After writing this paragraph, list the top 10 messages you think are the most important, explaining why in each case.
+        After writing this paragraph, list the top 10 messages you think are the most important, explaining 
+        'why it matters' in each case.
         Start this list with "Top 10 messages to read first:"
         """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
 
@@ -125,7 +132,8 @@ class EmailSummariser:
         processed_text = body_text.encode('ascii', 'ignore').decode('ascii')
 
         # Remove any web addresses by searching for 'https', 'http' and 'www', then removing the text up to the next space
-        processed_text = ' '.join([word for word in processed_text.split() if 'https' not in word and 'http' not in word and 'www' not in word])
+        processed_text = ' '.join([word for word in processed_text.split() if
+                                   'https' not in word and 'http' not in word and 'www' not in word])
 
         # remove any extra spaces
         while '  ' in processed_text:
@@ -281,7 +289,6 @@ class EmailSummariser:
             'category': 'UNPROCESSED'
         }
 
-
     @staticmethod
     def decode_mime_header(header_value: str) -> str:
         decoded_header, encoding = decode_header(header_value)[0]
@@ -336,10 +343,10 @@ class EmailSummariser:
 
         return response['message']['content'].strip()
 
-
     def ai_convert_html_to_plain_text(self, email_content: str) -> str:
         try:
-            plain_text  = self.call_ai_model(self.summarising_ai_model, self.ai_model_convert_html_to_plain_text_prompt, email_content)
+            plain_text = self.call_ai_model(self.summarising_ai_model, self.ai_model_convert_html_to_plain_text_prompt,
+                                            email_content)
             return plain_text.replace('\n', '. ').replace('..', '.').strip()
         except Exception as e:
             print('Error converting HTML to plain text: ', e)
@@ -387,7 +394,7 @@ class EmailSummariser:
     def ai_author_overall_headlines(self, summarised_group_content: str) -> str:
         print('Authoring top headlines summary...')
         try:
-            headlines =  self.call_ai_model(
+            headlines = self.call_ai_model(
                 self.summarising_ai_model, self.ai_model_top_headlines_prompt, summarised_group_content
             )
             # Put in two line breaks every fourth sentence to make the text more readable
@@ -430,35 +437,47 @@ class EmailSummariser:
                     continue
 
                 filtered_messages_list = [message for message in email_list if message["category"] == category]
-                if category not in self.messages_data.get('category_summary_dict', {}) or self.messages_data['category_summary_dict'][category] == '':
+                if category not in self.messages_data.get('category_summary_dict', {}) or \
+                        self.messages_data['category_summary_dict'][category] == '':
                     category_counter += 1
-                    print(f'Processing category: {category} ({category_counter} of {len(categories_list)}) - {len(filtered_messages_list)} messages...')
-                    self.messages_data['category_summary_dict'][category] = self.ai_author_category_headlines(filtered_messages_list)
+                    print(
+                        f'Processing category: {category} ({category_counter} of {len(categories_list)}) - {len(filtered_messages_list)} messages...')
+                    self.messages_data['category_summary_dict'][category] = self.ai_author_category_headlines(
+                        filtered_messages_list)
                     self.save_messages_list_to_file()
 
                 email_body += f'<hr>Category: {category} (from {len(filtered_messages_list)} messages)<br>'
                 email_body += self.messages_data['category_summary_dict'][category]
                 email_body += '\n\n'
 
-            if self.NEWSREADER_SCRIPT and ('headlines_summary' not in self.messages_data.get('headlines_summary', {}) or self.messages_data['headlines_summary'] == ''):
+            if self.NEWSREADER_SCRIPT and (
+                    'headlines_summary' not in self.messages_data.get('headlines_summary', {}) or self.messages_data[
+                'headlines_summary'] == ''):
                 self.messages_data['headlines_summary'] = self.ai_author_overall_headlines(email_body)
 
-            email_body = '<p>Overall Headline Summary:<br>' + self.messages_data['headlines_summary'] + '<br><br>' + email_body + '</p>'
+            email_body = '<p>Overall Headline Summary:<br>' + self.messages_data[
+                'headlines_summary'] + '<br><br>' + email_body + '</p>'
 
-            if self.INDIVIDUAL_EMAIL_SUMMARIES:
-                for message in email_list:
-                    email_body += '----------------------------------------<br><br>'
-                    email_body += f"From: {message['sender']}<br>"
-                    email_body += f"Date: {message.get('date_sent', 'unknown')}<br>"
-                    email_body += f"Subject: {message['subject']}<br>"
-                    email_body += f"Category: {message['category']}<br>"
-                    email_body += f"Summary: {message['summary']}<br><br>"
-
-            if 'concluding_paragraph' not in self.messages_data.get('concluding_paragraph', {}) or self.messages_data['concluding_paragraph'] == '':
+            if 'concluding_paragraph' not in self.messages_data.get('concluding_paragraph', {}) or self.messages_data[
+                'concluding_paragraph'] == '':
                 self.messages_data['concluding_paragraph'] = self.ai_author_concluding_paragraph(email_body)
                 self.save_messages_list_to_file()
 
             email_body += '<hr>Concluding Paragraph:<br>' + self.messages_data['concluding_paragraph']
+
+            if self.INDIVIDUAL_EMAIL_SUMMARIES:
+                email_body += '<hr>Individual Email Summaries:<br>'
+                for category in categories_list:
+                    if not category or category == 'UNPROCESSED':
+                        continue
+
+                    filtered_messages_list = [message for message in email_list if message["category"] == category]
+                    email_body += f'----------------------------------------<br>{category}<br>'
+                    for message in filtered_messages_list:
+                        email_body += '----------------------------------------<br><br>'
+                        email_body += f"From: {message['sender']} on {message['date_sent']} with subject '{message['subject']}':<br>"
+                        email_body += f"Category: {message['category']}<br>"
+                        email_body += f"Summary: {message['summary']}<br><br>"
 
             return email_body, earliest_message, latest_message
 
@@ -495,7 +514,8 @@ class EmailSummariser:
             response = ollama.chat(
                 model=self.summarising_ai_model,
                 messages=[
-                    {'role': 'system', 'content': 'The user will send you a "wake up" message. Just respond with a pleasantry!'},
+                    {'role': 'system',
+                     'content': 'The user will send you a "wake up" message. Just respond with a pleasantry!'},
                     {'role': 'user', 'content': 'Hello AI, this is a test message to wake you up! I hope you are well!'}
                 ])
 
@@ -504,14 +524,14 @@ class EmailSummariser:
             response = ollama.chat(
                 model=self.categorising_ai_model,
                 messages=[
-                    {'role': 'system', 'content': 'The user will send you a "wake up" message. Just respond with a pleasantry!'},
+                    {'role': 'system',
+                     'content': 'The user will send you a "wake up" message. Just respond with a pleasantry!'},
                     {'role': 'user', 'content': 'Hello AI, this is a test message to wake you up! I hope you are well!'}
                 ])
 
             print(f'AI model "{self.categorising_ai_model}" is awake and says: {response["message"]["content"]}')
         except Exception as e:
             print(f'Error waking up AI models: {e}')
-
 
     def run(self):
         try:
@@ -528,7 +548,14 @@ class EmailSummariser:
             # If it exists, load it:
             if os.path.exists('email_messages.json'):
                 with open('email_messages.json', 'r', encoding="utf8") as f:
-                    if input('Do you want to use the saved email messages list? (y/n) > ') == 'y':
+                    try:
+                        user_input = inputimeout(
+                            prompt='Do you want to use the saved email messages list? (y/n, or n assumed in 5 seconds) > ',
+                            timeout=5)
+                    except TimeoutOccurred:
+                        user_input = 'n'  # If no input is provided within 5 seconds, assume 'n'
+
+                    if user_input == 'y':
                         self.messages_data = json.load(f)
                     else:
                         self.messages_data['messages_list'] = self.get_gmail_messages()
@@ -551,21 +578,28 @@ class EmailSummariser:
                         if len(email_text) < 100:
                             print('Email content too short to summarise')
                         else:
-                            print('Processing message:', process_counter, 'of', len(self.messages_data['messages_list']),
+                            print('Processing message:', process_counter, 'of',
+                                  len(self.messages_data['messages_list']),
                                   ' - ', round(len(email_text) / 1000, 1), 'Kb from', message['sender'],
                                   '\n\t\t\twith subject:', message['subject'])
-                            
+
                             # If the category is empty, 'UNOPROCESSED' or contains a space, get the AI to summarise the email
                             # and if necessary, re-summarise it!
                             while message['category'] not in allowed_categories_list:
                                 response = self.ai_summarise_email(email_text)
-    
+
                                 # The frst word of the response is the category
                                 message['category'] = response.split(':')[0].strip().upper()
-    
+
+                                # If the category is not in the allowed list, the AI has not understood the
+                                # email (or the content fell foul of the model's moral filters, so delete the summary.
+                                if message['category'] not in allowed_categories_list:
+                                    message['category'] = 'UNPROCESSED'
+                                    message['summary'] = '(AI did not understand the email content)'
+                                    break
+
                                 # The rest of the response is the summary
                                 message['summary'] = response.split(':')[1].strip()
-
 
                             print('\t\t\tCategory:', message['category'])
 
@@ -591,7 +625,6 @@ class EmailSummariser:
 
         except Exception as e:
             print(f"An error occurred during the summarisation process: {e}")
-
 
 
 if __name__ == "__main__":
