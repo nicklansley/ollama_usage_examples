@@ -70,8 +70,9 @@ class EmailSummariser:
         You are tasked with both categorising and summarising email messages. 
         
         First, categorize the email using a single word. 
-        Choose from this list of categories. Do not use any other categories.:
-        {allowed_categories_list}
+        Choose from this list of categories. Do not use any other categories:
+        {allowed_categories_list}. To help you, if you see a word in the email that matches a category, 
+        prioritise that word over others. If not, use your judgement as to which category best describes the content.
         
         Next, summarise the message. 
         You are an expert at summarising email messages and prefer to use clauses instead of complete sentences in 
@@ -90,20 +91,22 @@ class EmailSummariser:
         Create engaging and informative news headlines from the emails received in the past <HOURS_TO_FETCH> hours. 
         Your summary should be a paragraph suitable for a news bulletin opening. Be fluid and expressive, and don't include 
         any bullet points or lists. Make it easy for the newsreader to present the information.
-        Highlight any significant news. 
+        Highlight any significant news. Your script will be read out at <TIME_STRING> so phrase 'morning', 'afternoon' and other time-based words accordingly as needed.  
         Conclude with your own observations on the messages, starting with "In my opinion..."."
-        """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
+        """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH)).replace('<TIME_STRING>', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
 
         self.ai_model_category_headlines_prompt = """
         You are an expert scriptwriter for a news radio station. 
         Condense the emails received in the past <HOURS_TO_FETCH> hours into an engaging and informative 
         single-paragraph news bulletin summary, highlighting noteworthy points even if the emails seem mundane. 
-        Be concise, use British English spelling. Make it easy for the newsreader to present the information,  
+        Be concise, use British English spelling. Make it easy for the newsreader to present the information.
+        Your escript will be read out at <TIME_STRING> so phrase 'morning', 'afternoon' and other time-based words accordingly as needed.  
         and conclude with your personal observations starting with "In my opinion...".
         Start your output with the actual script. NO need to say 'Good morning / evening' or 'This is the news' or
         'Here are the headlines' or similar. No I'm [Newsreader] or similar. Just the news. This is so that your
         paragraph and opinion can be used in the middle of a larger script of which your output forms part.
-        """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH))
+        """.replace('<HOURS_TO_FETCH>', str(self.HOURS_TO_FETCH)).replace('<TIME_STRING>', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
         self.ai_model_concluding_summary_prompt = """
         You are an expert scriptwriter for a news radio station. 
